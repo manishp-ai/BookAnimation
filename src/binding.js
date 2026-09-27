@@ -661,7 +661,12 @@ export class CaseBinding extends THREE.Group {
       // sheet the whole block rests on. Both fade in from nothing, so a shut
       // book is a flat stack and t=0 looks exactly as it always has.
       const turn = entry.outward === 1 ? pose.openAmount : 0;
-      const paper = leafDeformation(turn, pose.openAmount);
+      // Strength is the same number the leaves get, not openAmount. A cover is
+      // the outermost sheet of the book, so it has to flatten with the sheet
+      // it is lying against: on the last leaf the fade takes the text block to
+      // dead flat, and a cover still carrying its full droop domes a whole
+      // text block's worth straight up through the pile lying on it.
+      const paper = leafDeformation(turn, this.#curve.intensity);
       const sign = -entry.normalSign;
       entry.curl.intensity = sign * paper.curl;
       entry.bend.force = sign * paper.bend;

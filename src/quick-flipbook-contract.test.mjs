@@ -182,7 +182,9 @@ test("a limp cover droops on the engine's own law, not one invented for it", () 
   assert.match(binding, /function leafDeformation\(turnProgress, strength, direction = 1\)/);
   assert.match(binding, /curl: \(-1 \+ 2 \* turnProgress\) \* \(-Math\.sin\(angle\) \+ 1\) \* strength/);
   assert.match(binding, /bend: Math\.min\(-Math\.sin\(angle\) \/ 2, -1e-4\) \* direction \* strength/);
-  assert.match(binding, /const paper = leafDeformation\(turn, pose\.openAmount\)/);
+  // Covers fade on the same number the leaves do, so the case flattens with
+  // the block instead of doming through it on the last leaf.
+  assert.match(binding, /const paper = leafDeformation\(turn, this\.#curve\.intensity\)/);
   assert.match(binding, /entry\.curl\.intensity = sign \* paper\.curl/);
   assert.match(binding, /entry\.bend\.force = sign \* paper\.bend/);
   assert.doesNotMatch(binding, /new MODIFIERS\.Twist/);

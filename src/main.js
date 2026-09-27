@@ -856,3 +856,14 @@ function animate(timestamp) {
 }
 
 requestRender();
+
+// TEMPORARY debug scaffold for the spine-hinge investigation — remove before commit.
+window.__passportDebug = {
+  flipBook,
+  scene,
+  camera,
+  renderer,
+  requestRender,
+  get coverSpine() { return coverSpine; },
+  setProgress(value) { flipBook.progress = value; requestRender(); },
+};

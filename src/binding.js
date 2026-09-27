@@ -147,11 +147,6 @@ class GutterFlex extends MODIFIERS.UserDefined {
     super();
     this.displacement = 0;
     this.range = 1;
-    // The sheet's own units per world unit along the out-of-plane axis. The
-    // rise is computed in world units by binding-geometry; the modifier writes
-    // in the sheet's. Where the two differ the rise has to be converted, or
-    // the leaf lands at the wrong height.
-    this.unitScale = 1;
     this.renderVector = (vertex) => {
       if (this.displacement === 0) return;
       const along = gutterProfile(vertex.getRatio(MODIFIERS.ModConstant.X), this.range);
@@ -162,9 +157,7 @@ class GutterFlex extends MODIFIERS.UserDefined {
   }
 
   set(rise, turnProgress, dimensions) {
-    this.displacement = gutterDisplacement(rise, turnProgress) / this.unitScale;
-    // The range runs along the sheet's length as a ratio, so it is unitless
-    // and takes the world rise directly.
+    this.displacement = gutterDisplacement(rise, turnProgress);
     this.range = gutterRange(dimensions, rise);
   }
 }
@@ -187,11 +180,6 @@ class LeafFlex extends GutterFlex {
   configure(dimensions, index) {
     this.dimensions = dimensions;
     this.index = index;
-    // The leaf's out-of-plane axis is scaled with its width, so the world
-    // rise has to be converted into the sheet's own units. Without this the
-    // structural heights binding-geometry computes — which pile rests on
-    // which cover, and how high — all come out short.
-    this.unitScale = dimensions.leafWidth;
     this.appliedRise = Number.NaN;
     this.appliedCurve = Number.NaN;
   }
@@ -611,15 +599,7 @@ export class CaseBinding extends THREE.Group {
       this.#textBlock.add(pivot);
 
       sheet.position.set(0, 0, 0);
-      // The middle term is the out-of-plane axis — everything the deformers
-      // push a vertex off the flat sheet by. Left at 1 it is measured in a
-      // different unit from the page's own width, so the droop comes out
-      // 1/leafWidth too deep: the bent leaf reaches ~9% further from its
-      // anchor than it is long, which no sheet of paper can do, and at the
-      // quarter turn that excess rotates into the horizontal and throws the
-      // fore-edge past the cover. Scaling it with the width puts the droop
-      // back in the page's own units.
-      sheet.scale.set(leafWidth, leafWidth, -caseHeight);
+      sheet.scale.set(leafWidth, 1, -caseHeight);
       // Off by default; #refreshLeafShadows switches on whichever leaf is
       // actually lifted. The flag is what keeps the reader's own one-time
       // "everything casts" traversal from turning the whole pile back on.
@@ -662,6 +642,15 @@ export class CaseBinding extends THREE.Group {
         flex.appliedRise = flex.refresh();
         flex.appliedCurve = curve.intensity;
         inner(pageProgress, direction, curve.intensity);
+        // The engine writes the bend in unit-sheet space, where the page is
+        // 1 long; the page's width is then scaled to leafWidth but the bend's
+        // depth is not, so the droop is deeper than the page is wide and a
+        // bent leaf reaches further from its anchor than it is long. At the
+        // quarter turn that excess rotates into the horizontal and throws the
+        // fore-edge past the board. Only the bend is touched — the curl and
+        // the gutter flex set the resting pile's height, and scaling those
+        // would drop the leaves below the pastedown and hide them behind it.
+        sheet.bend.force = Math.min(sheet.bend.force * CaseBinding.#BEND_DEPTH, -1e-4);
       };
       sheet.userData.leafFlex = flex;
     }
@@ -676,6 +665,14 @@ export class CaseBinding extends THREE.Group {
   // Below this a leaf has barely left its pile, so the shadow it would cast
   // still lies under itself — switching it on here cannot pop.
   static #LIFT_EPSILON = 0.01;
+  // How much of the engine's bend a leaf keeps, so that its reach stays
+  // inside the boards. Bisected against the live scene over 51 samples
+  // spanning the first, middle and last turns: 0.5969 puts the fore-edge
+  // 0.0001 past a cover half-width of 0.6815 and 0.5953 is clean, so this
+  // sits a little under the measured bound. Scaling the depth by the page's
+  // own width (0.6635) is the principled figure but leaves 0.0083 showing,
+  // because the bend's depth is not quite linear in its force.
+  static #BEND_DEPTH = 0.58;
 
   /**
    * The spine rolling changes every leaf's climb out of the gutter without

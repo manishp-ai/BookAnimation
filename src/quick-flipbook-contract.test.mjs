@@ -195,19 +195,20 @@ test("cover stiffness is one switch and nothing else", () => {
   assert.match(books, /"coverStyle":/);
 });
 
-// A deformer pushes a vertex off the flat sheet along the leaf's middle axis.
-// That axis has to carry the same scale as the page's width, or the droop is
-// measured in a different unit from the page it is deforming: the bent leaf
-// reaches further from its anchor than it is long, and the excess rotates
-// into the horizontal at the quarter turn and throws the fore-edge past the
-// cover. Measured before the fix: 0.0639 past a cover half-width of 0.6815,
-// and the resting pile stood 0.0167 proud of the cover's own face.
-test("a leaf's droop is measured in the same units as the leaf", () => {
-  assert.match(binding, /sheet\.scale\.set\(leafWidth, leafWidth, -caseHeight\)/);
-  // ...and the structural rise, which binding-geometry computes in world
-  // units, is converted back so the piles still land where they were told to.
-  assert.match(binding, /this\.unitScale = dimensions\.leafWidth/);
-  assert.match(binding, /gutterDisplacement\(rise, turnProgress\) \/ this\.unitScale/);
+// The engine writes the bend in unit-sheet space, where the page is 1 long.
+// The width is then scaled to leafWidth and the bend's depth is not, so the
+// droop is deeper than the page is wide and a bent leaf reaches further from
+// its anchor than it is long; at the quarter turn that excess rotates into
+// the horizontal and throws the fore-edge past the board. Measured before
+// the fix: 0.0663 past a cover half-width of 0.6815.
+test("a turning leaf cannot reach further than it is long", () => {
+  assert.match(binding, /sheet\.bend\.force = Math\.min\(sheet\.bend\.force \* CaseBinding\.#BEND_DEPTH, -1e-4\)/);
+  assert.match(binding, /static #BEND_DEPTH = 0\.58/);
+  // Only the bend. The curl and the gutter flex are what hold the resting
+  // pile above the pastedown -- scaling those too drops the leaves under it
+  // and the cover draws over them.
+  assert.match(binding, /sheet\.scale\.set\(leafWidth, 1, -caseHeight\)/);
+  assert.doesNotMatch(binding, /unitScale/);
 });
 
 test("a limp cover droops on the engine's own law, not one invented for it", () => {

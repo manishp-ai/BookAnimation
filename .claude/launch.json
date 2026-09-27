@@ -5,7 +5,15 @@
       "name": "passportbook-dev",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
-      "port": 5173
+      "port": 5173,
+      "autoPort": true
+    },
+    {
+      "name": "reference-flipbook",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "/home/Fool/dlt/resume/sections/flipbook", "run", "dev"],
+      "port": 5174,
+      "autoPort": true
     }
   ]
 }

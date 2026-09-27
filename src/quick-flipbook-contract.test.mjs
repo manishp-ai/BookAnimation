@@ -3,21 +3,26 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const main = await readFile(new URL("./main.js", import.meta.url), "utf8");
+const binding = await readFile(new URL("./binding.js", import.meta.url), "utf8");
 const books = await readFile(new URL("./books.js", import.meta.url), "utf8");
 const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
 const styles = await readFile(new URL("./style.css", import.meta.url), "utf8");
 const config = await readFile(new URL("../vite.config.js", import.meta.url), "utf8");
 
+// The Quick FlipBook lifecycle still drives every page turn; the case binding
+// owns the engine now, so the calls live in binding.js and main.js talks to
+// the binding.
 test("3D Book 2 uses the requested Quick FlipBook lifecycle", () => {
-  assert.match(main, /import \{ FlipBook \} from "quick_flipbook"/);
-  assert.match(main, /new FlipBook\(/);
-  assert.match(main, /flipBook\.setPages\(/);
-  assert.match(main, /flipBook\.animate\(delta\)/);
+  assert.match(binding, /import \{ FlipBook \} from "quick_flipbook"/);
+  assert.match(binding, /new FlipBook\(/);
+  assert.match(binding, /this\.#engine\.setPages\(/);
+  assert.match(binding, /this\.#engine\.progress = pose\.leafProgress/);
+  assert.match(main, /binding\.animate\(delta\)/);
 });
 
 test("reader supports buttons, pointer gestures, and keyboard navigation", () => {
-  assert.match(main, /flipBook\.nextPage\(\)/);
-  assert.match(main, /flipBook\.previousPage\(\)/);
+  assert.match(main, /binding\.nextPage\(\)/);
+  assert.match(main, /binding\.previousPage\(\)/);
   assert.match(main, /pointerdown/);
   assert.match(main, /pointermove/);
   assert.match(main, /pointerleave/);
@@ -30,9 +35,9 @@ test("reader supports buttons, pointer gestures, and keyboard navigation", () =>
   assert.match(main, /startFraction: preview\?\.fraction \?\? 0/);
   assert.match(main, /start\.startFraction/);
   assert.match(main, /function applyDragFrame\(\)/);
-  assert.match(main, /flipBook\.progress = start\.sheet \+ start\.direction \* start\.pendingFraction/);
+  assert.match(main, /binding\.progress = start\.sheet \+ start\.direction \* start\.pendingFraction/);
   assert.match(main, /const dragOwnsFrame = applyDragFrame\(\)/);
-  assert.match(main, /if \(!dragOwnsFrame\) flipBook\.animate\(delta\)/);
+  assert.match(main, /if \(!dragOwnsFrame\) binding\.animate\(delta\)/);
   assert.match(main, /shouldCompleteDrag\(start\.fraction, elapsed\)/);
   assert.match(main, /if \(!isActivePointer\(start, event\.pointerId\)\) return/);
   assert.match(main, /if \(!isActivePointer\(pointerStart, event\.pointerId\)\) return/);
@@ -105,8 +110,12 @@ test("3D Book 2 renders soft dynamic shadows and refreshes every deformed sheet'
   assert.match(main, /keyLight\.castShadow = true/);
   assert.match(main, /keyLight\.shadow\.normalBias = 0\.012/);
   assert.match(main, /keyLight\.shadow\.radius = 3/);
-  assert.match(main, /object\.castShadow = true/);
+  // Every mesh casts unless the binding has opted it out — which it does only
+  // for a surface sitting within a shadow-map bias of another, where two
+  // casters would acne against each other instead of reading as one sheet.
+  assert.match(main, /object\.castShadow = object\.userData\.shadowCaster !== false/);
   assert.match(main, /object\.receiveShadow = true/);
+  assert.match(binding, /mesh\.userData\.shadowCaster = facing === 1/);
   assert.match(main, /dirtySheets\.add\(sheet\)/);
   assert.match(main, /for \(const sheet of dirtySheets\)/);
   assert.match(main, /refreshDirtyPageNormals\(\)/);
@@ -139,7 +148,68 @@ test("3D Book 2 renders on demand and parks a settled edge preview", () => {
   assert.match(main, /stop feeding the modifier stack identical poses/);
 });
 
+test("the book is built as a case binding, with the spine as its anchor", () => {
+  // Hierarchy: covers hang off joint pivots on the spine, leaves off anchors
+  // on its inner face. Everything inside the case is carried by the spine.
+  assert.match(binding, /this\.#book\.add\(this\.#spine\)/);
+  assert.match(binding, /this\.#spine\.add\(this\.#frontJoint, this\.#backJoint, this\.#textBlock\)/);
+  assert.match(binding, /this\.#frontJoint\.add\(this\.#frontCover\)/);
+  assert.match(binding, /this\.#backJoint\.add\(this\.#backCover\)/);
+  assert.match(binding, /pivot\.position\.set\(anchor\.x, anchor\.y, 0\)/);
+  // The spine rolls onto its face as the case opens, and that is the only
+  // thing it ever does — it is never translated.
+  assert.match(binding, /this\.#spine\.rotation\.z = pose\.spineAngle/);
+  assert.doesNotMatch(binding, /this\.#spine\.position/);
+  // Joints and pivots take the roll back out, so a cover's or a leaf's
+  // attitude depends only on how far it has turned.
+  assert.match(binding, /this\.#frontJoint\.rotation\.z = pose\.coverAngle - pose\.spineAngle/);
+  assert.match(binding, /this\.#backJoint\.rotation\.z = -pose\.spineAngle/);
+  assert.match(binding, /pivot\.rotation\.z = -pose\.spineAngle/);
+  // Recentring is presentational and lives outside the case.
+  assert.match(binding, /this\.#frame\.position\.x = centringOffset\(/);
+});
+
+test("cover stiffness is one switch and nothing else", () => {
+  assert.match(binding, /export const COVER_STYLES = \["soft", "rigid"\]/);
+  assert.match(binding, /this\.#coverStyle === "soft"/);
+  assert.match(books, /"coverStyle":/);
+});
+
+test("a limp cover droops on the engine's own law, not one invented for it", () => {
+  // Curl, bend and twist together — the three Quick FlipBook puts on a leaf.
+  // Curl alone leaves the cover dead flat at the half turn, which is exactly
+  // where a limp cover is at its floppiest.
+  assert.match(binding, /function leafDeformation\(turnProgress, strength, direction = 1\)/);
+  assert.match(binding, /curl: \(-1 \+ 2 \* turnProgress\) \* \(-Math\.sin\(angle\) \+ 1\) \* strength/);
+  assert.match(binding, /bend: Math\.min\(-Math\.sin\(angle\) \/ 2, -1e-4\) \* direction \* strength/);
+  assert.match(binding, /twist: \(Math\.sin\(angle\) \/ 10\) \* strength/);
+  assert.match(binding, /const paper = leafDeformation\(turn, pose\.openAmount\)/);
+  assert.match(binding, /entry\.curl\.intensity = sign \* paper\.curl/);
+  assert.match(binding, /entry\.bend\.force = sign \* paper\.bend/);
+  assert.match(binding, /entry\.twist\.angle = sign \* paper\.twist/);
+  // Unit geometry sized by the transform above it, the way a FlipPage is, so
+  // the modifiers measure a cover and a leaf on the same scale.
+  assert.match(binding, /new THREE\.PlaneGeometry\(1, 1, subdivisions, subdivisions\)/);
+  assert.match(binding, /sheet\.scale\.set\(boardWidth, 1, caseHeight\)/);
+  // Fading with openAmount is what keeps a shut book flat, so t=0 is untouched.
+  assert.match(binding, /const turn = entry\.outward === 1 \? pose\.openAmount : 0/);
+});
+
+test("the pre-rebuild spine compensations are gone and stay gone", async () => {
+  const orbit = await readFile(new URL("./orbit.js", import.meta.url), "utf8");
+  for (const source of [main, binding, orbit]) {
+    assert.doesNotMatch(source, /SPINE_FLATNESS/);
+    assert.doesNotMatch(source, /spineGeometryFromBounds/);
+    assert.doesNotMatch(source, /coverSpine/);
+    assert.doesNotMatch(source, /clearance/);
+  }
+  // No measure-the-bounds-then-compensate step, and no visibility toggle
+  // standing in for occlusion.
+  assert.doesNotMatch(main, /setFromObject\(binding\)/);
+  assert.doesNotMatch(binding, /\.visible = false/);
+});
+
 test("3D Book 2 settles page materials and avoids per-frame DOM writes", () => {
-  assert.match(main, /for \(let index = 0; index < pageMaterials\.length; index \+= 1\) await Promise\.resolve\(\)/);
+  assert.match(main, /for \(let index = 0; index < leafMaterials\.length; index \+= 1\) await Promise\.resolve\(\)/);
   assert.match(main, /if \(statusKey === lastStatusKey\) return/);
 });

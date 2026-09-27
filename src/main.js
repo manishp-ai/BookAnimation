@@ -1,6 +1,6 @@
 import * as THREE from "three";
-import { FlipBook } from "quick_flipbook";
 import { books } from "./books.js";
+import { CaseBinding } from "./binding.js";
 import {
   chooseDragDirection,
   dragFraction,
@@ -10,7 +10,7 @@ import {
   isPointerOverBook,
   shouldCompleteDrag,
 } from "./drag.js";
-import { nextOrbitTarget, OrbitSpring, shortestAngleTo, spineGeometryFromBounds } from "./orbit.js";
+import { nextOrbitTarget, OrbitSpring, shortestAngleTo } from "./orbit.js";
 import "./style.css";
 
 const chinese = document.documentElement.lang.startsWith("zh");
@@ -98,110 +98,18 @@ const bookRig = new THREE.Group();
 bookRig.rotation.set(0, 0, 0);
 scene.add(bookRig);
 
-const flipBook = new FlipBook({
+// A real hardcover case: back board + spine + front board as one connected
+// structure, with the spine as the static anchor both covers hinge from and
+// every leaf is bound to. See src/binding.js for the construction and
+// src/binding-geometry.js for the measurements it follows.
+const binding = new CaseBinding({
   flipDuration: reducedMotion ? 0.001 : 0.78,
-  yBetweenPages: 0.0004,
   pageSubdivisions: PAGE_SUBDIVISIONS,
+  // Rolling the spine re-deforms leaves the page-turn engine never touched, so
+  // their normals need recomputing too.
+  onSheetDeformed: (sheet) => dirtySheets.add(sheet),
 });
-flipBook.traverse((object) => {
-  if (object.isMesh) {
-    object.castShadow = true;
-    object.receiveShadow = true;
-  }
-});
-bookRig.add(flipBook);
-
-// The spine is nothing but the front cover's own art, wrapped: a narrow strip
-// cropped from the cover artwork's hinge-side edge, so it reads as the same
-// cover material continuing around the book's actual edge rather than a
-// separate designed object. It's a box exactly as thin as the book's own
-// measured thickness on every axis (never wider than the cover's real edge,
-// so it can't protrude past the cover's silhouette), sized from the closed
-// book's own measured bounds: it spans the full head-to-tail height (ending
-// exactly at the cover's top and bottom) and the full real page-stack
-// thickness (filling the gap between front and back flush, no seam).
-// Because it's a child of flipBook it inherits that object's own
-// position hack (the one keeping the visual hinge fixed on screen while
-// pages turn) automatically, so — as in a real bound book — it stays at the
-// gutter and stays visible whether the book is closed or open.
-let coverSpine = null;
-let coverSpineTexture = null;
-
-function makeSpineStripTexture(coverMap, widthFraction) {
-  const image = coverMap?.image;
-  const sourceWidth = image?.width ?? image?.naturalWidth ?? 0;
-  const sourceHeight = image?.height ?? image?.naturalHeight ?? 0;
-  if (!image || !sourceWidth || !sourceHeight) return null;
-
-  const cropWidth = Math.max(1, Math.round(sourceWidth * widthFraction));
-  const canvas = document.createElement("canvas");
-  canvas.width = cropWidth;
-  canvas.height = sourceHeight;
-  const context = canvas.getContext("2d");
-  if (!context) return null;
-  // The hinge-side edge of the front cover art (its left edge, since the
-  // book opens toward +X and the hinge sits at the cover's min-X side) is
-  // what a real cover's cloth would wrap around the spine — so that's the
-  // slice taken, at the cover's own resolution, no invented content.
-  context.drawImage(image, 0, 0, cropWidth, sourceHeight, 0, 0, cropWidth, sourceHeight);
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.anisotropy = Math.min(MAX_TEXTURE_ANISOTROPY, renderer.capabilities.getMaxAnisotropy());
-  texture.needsUpdate = true;
-  return texture;
-}
-
-function rebuildCoverSpine(coverMap) {
-  if (coverSpine) {
-    flipBook.remove(coverSpine);
-    coverSpine.geometry.dispose();
-    coverSpine.material.dispose();
-    coverSpine = null;
-  }
-  if (coverSpineTexture) {
-    coverSpineTexture.dispose();
-    coverSpineTexture = null;
-  }
-
-  scene.updateMatrixWorld(true);
-  const box = new THREE.Box3().setFromObject(flipBook);
-  if (box.isEmpty()) return;
-  const inverse = flipBook.matrixWorld.clone().invert();
-  const min = box.min.clone().applyMatrix4(inverse);
-  const max = box.max.clone().applyMatrix4(inverse);
-  const spine = spineGeometryFromBounds(
-    {
-      minX: Math.min(min.x, max.x),
-      minY: Math.min(min.y, max.y),
-      maxY: Math.max(min.y, max.y),
-      minZ: Math.min(min.z, max.z),
-      maxZ: Math.max(min.z, max.z),
-    },
-    flipBook.scale.x,
-  );
-  if (spine.thickness <= 0) return;
-
-  coverSpineTexture = makeSpineStripTexture(coverMap, spine.widthLocal);
-  const spineMaterial = makePaperMaterial(coverSpineTexture);
-  spineMaterial.side = THREE.DoubleSide;
-
-  // A box, not a flat face: the top-down camera looks straight down the Y
-  // axis, so a zero-thickness face standing edge-on to it (any orientation
-  // other than flat) projects to zero area and simply doesn't render. Its
-  // real top face (visible from above, filling the gutter) and side faces
-  // (visible once rotated) read as a flat sheet, not a square rod, because
-  // its top-down width is a small fraction of its real thickness rather than
-  // matching it (see SPINE_FLATNESS in orbit.js).
-  coverSpine = new THREE.Mesh(
-    new THREE.BoxGeometry(spine.widthLocal, spine.boxHeight, spine.depth),
-    spineMaterial,
-  );
-  coverSpine.position.set(spine.centerX, spine.centerY, spine.centerZ);
-  coverSpine.castShadow = false;
-  coverSpine.receiveShadow = true;
-  flipBook.add(coverSpine);
-}
+bookRig.add(binding);
 
 // Drag-to-orbit "look at every side" view, adapted from Ashen Press
 // (~/AshenPress/index.html): a spring smooths the pose, one axis is clamped
@@ -358,7 +266,7 @@ function rememberBook(bookId) {
 }
 
 function memoizeSheetDeformation() {
-  for (const sheet of flipBook) {
+  for (const sheet of binding) {
     if (memoizedSheets.has(sheet)) continue;
     const flip = sheet.flip.bind(sheet);
     let previousPageProgress = Number.NaN;
@@ -412,22 +320,38 @@ async function selectBook(book, immediate = false) {
   setLoading(true, readerText.preparing(bookTitle(book)));
   resize();
 
-  const pageMaterials = await Promise.all(book.pages.map((source) => pageMaterial(book.id, source)));
+  const [leafMaterials, frontMaterial, backMaterial, paperMaterial] = await Promise.all([
+    Promise.all(book.pages.map((source) => pageMaterial(book.id, source))),
+    pageMaterial(book.id, book.case.front),
+    pageMaterial(book.id, book.case.back),
+    pageMaterial(book.id, book.case.paper),
+  ]);
   if (token !== loadToken) return;
 
-  flipBook.scale.x = book.ratio;
-  flipBook.setPages(pageMaterials);
+  binding.setEdition({
+    caseWidth: book.ratio,
+    caseHeight: 1,
+    thickness: book.thickness,
+    coverThickness: book.coverThickness,
+    coverStyle: book.coverStyle,
+    frontMaterial,
+    backMaterial,
+    paperMaterial,
+    spineAnisotropy: Math.min(MAX_TEXTURE_ANISOTROPY, renderer.capabilities.getMaxAnisotropy()),
+    leafMaterials,
+  });
   memoizeSheetDeformation();
-  flipBook.progress = 0;
+  binding.progress = 0;
   refreshAllPageNormals();
-  rebuildCoverSpine(pageMaterials[0]?.map ?? null);
   // Quick FlipBook assigns supplied materials through an internal promise
   // chain. Drain those microtasks before making the new edition interactive.
-  for (let index = 0; index < pageMaterials.length; index += 1) await Promise.resolve();
+  for (let index = 0; index < leafMaterials.length; index += 1) await Promise.resolve();
   if (token !== loadToken) return;
-  flipBook.traverse((object) => {
+  binding.traverse((object) => {
     if (object.isMesh) {
-      object.castShadow = true;
+      // The binding opts a part out when two of its surfaces sit within a
+      // shadow-map bias of each other; everything else casts.
+      object.castShadow = object.userData.shadowCaster !== false;
       object.receiveShadow = true;
     }
   });
@@ -438,7 +362,7 @@ async function selectBook(book, immediate = false) {
 }
 
 function refreshAllPageNormals() {
-  for (const sheet of flipBook) sheet.page.geometry.computeVertexNormals();
+  for (const sheet of binding) sheet.page.geometry.computeVertexNormals();
   dirtySheets.clear();
 }
 
@@ -466,7 +390,7 @@ function clearEdgePreview(immediate = false) {
     return;
   }
 
-  flipBook.progress = edgePreview.baseSheet;
+  binding.progress = edgePreview.baseSheet;
   edgePreview.baseSheet = null;
   edgePreview.direction = 0;
   edgePreview.amount = 0;
@@ -477,11 +401,11 @@ function updateEdgePreview(event) {
   if (reducedMotion || loading || pointerStart || event.pointerType === "touch") return;
 
   const previewActive = edgePreview.baseSheet !== null;
-  const sheet = previewActive ? edgePreview.baseSheet : Math.round(flipBook.progress);
-  if (!previewActive && Math.abs(flipBook.progress - sheet) >= 0.001) return;
+  const sheet = previewActive ? edgePreview.baseSheet : Math.round(binding.progress);
+  if (!previewActive && Math.abs(binding.progress - sheet) >= 0.001) return;
 
   const metrics = getBookScreenMetrics();
-  const maxSheet = Math.ceil(flipBook.totalPages / 2);
+  const maxSheet = Math.ceil(binding.totalPages / 2);
   const direction = edgePreviewDirection({
     sheet,
     maxSheet,
@@ -515,14 +439,14 @@ function animateEdgePreview(delta) {
   }
 
   if (edgePreview.target === 0 && edgePreview.amount === 0) {
-    flipBook.progress = edgePreview.baseSheet;
+    binding.progress = edgePreview.baseSheet;
     edgePreview.baseSheet = null;
     edgePreview.direction = 0;
     edgePreview.amount = 0;
     return false;
   }
 
-  const maxSheet = Math.ceil(flipBook.totalPages / 2);
+  const maxSheet = Math.ceil(binding.totalPages / 2);
   const pose = edgePreviewPose(
     edgePreview.baseSheet,
     edgePreview.direction,
@@ -540,16 +464,16 @@ function animateEdgePreview(delta) {
   if (
     edgePreview.target > 0
     && edgePreview.amount === edgePreview.target
-    && Math.abs(flipBook.progress - pose.progress) < EDGE_PREVIEW_EPSILON
+    && Math.abs(binding.progress - pose.progress) < EDGE_PREVIEW_EPSILON
   ) {
-    if (flipBook.progress !== pose.progress) flipBook.progress = pose.progress;
+    if (binding.progress !== pose.progress) binding.progress = pose.progress;
     return false;
   }
 
-  flipBook.progress = pose.progress;
+  binding.progress = pose.progress;
   if (edgePreview.target === 0) {
     let sheetIndex = 0;
-    for (const sheet of flipBook) {
+    for (const sheet of binding) {
       if (sheetIndex === pose.sheetIndex) {
         // The engine derives bend direction from progress velocity. During a
         // hover return that would invert the curl, so preserve the lift's bend.
@@ -570,7 +494,7 @@ function takeEdgePreviewForDrag() {
     direction: edgePreview.direction,
     fraction: edgePreview.amount,
   };
-  // Keep flipBook.progress and the current curl exactly where the hover left
+  // Keep binding.progress and the current curl exactly where the hover left
   // them; pointer movement will take ownership of that pose on the next frame.
   edgePreview.baseSheet = null;
   edgePreview.direction = 0;
@@ -580,26 +504,26 @@ function takeEdgePreviewForDrag() {
 }
 
 function nextPage() {
-  if (!loading && flipBook.currentPage < flipBook.totalPages) {
+  if (!loading && binding.currentPage < binding.totalPages) {
     clearEdgePreview(true);
-    flipBook.nextPage();
+    binding.nextPage();
     requestRender();
   }
 }
 
 function previousPage() {
-  if (!loading && flipBook.currentPage > 0) {
+  if (!loading && binding.currentPage > 0) {
     clearEdgePreview(true);
-    flipBook.previousPage();
+    binding.previousPage();
     requestRender();
   }
 }
 
 function updateStatus() {
   const current = edgePreview.baseSheet === null
-    ? Math.round(flipBook.currentPage || 0)
+    ? Math.round(binding.currentPage || 0)
     : edgePreview.baseSheet * 2;
-  const total = flipBook.totalPages || selectedBook.pages.length;
+  const total = binding.totalPages || selectedBook.pages.length;
   const shown = Math.min(current, total);
   const statusKey = `${loading}:${shown}:${total}`;
   if (statusKey === lastStatusKey) return;
@@ -632,9 +556,9 @@ canvas.addEventListener("pointerdown", (event) => {
   const preview = takeEdgePreviewForDrag();
   if (!preview) clearEdgePreview(true);
   const metrics = getBookScreenMetrics();
-  const sheet = preview?.sheet ?? Math.round(flipBook.progress);
-  const maxSheet = Math.ceil(flipBook.totalPages / 2);
-  const settled = preview !== null || Math.abs(flipBook.progress - sheet) < 0.001;
+  const sheet = preview?.sheet ?? Math.round(binding.progress);
+  const maxSheet = Math.ceil(binding.totalPages / 2);
+  const settled = preview !== null || Math.abs(binding.progress - sheet) < 0.001;
   const overBook = isPointerOverBook({
     sheet,
     maxSheet,
@@ -739,7 +663,7 @@ canvas.addEventListener("pointerup", (event) => {
     const elapsed = performance.now() - start.time;
     const complete = shouldCompleteDrag(start.fraction, elapsed);
     const targetSheet = start.sheet + (complete ? start.direction : 0);
-    flipBook.currentPage = targetSheet * 2;
+    binding.currentPage = targetSheet * 2;
     requestRender();
     return;
   }
@@ -753,7 +677,7 @@ canvas.addEventListener("pointerup", (event) => {
   } else if (elapsed < 500 && Math.abs(deltaY) < 20) {
     event.clientX < window.innerWidth / 2 ? previousPage() : nextPage();
   } else if (start.startFraction > 0) {
-    flipBook.currentPage = start.sheet * 2;
+    binding.currentPage = start.sheet * 2;
     requestRender();
   }
 });
@@ -770,7 +694,7 @@ canvas.addEventListener("pointercancel", (event) => {
 
   // This also restores a consumed hover pose when the pointer is cancelled
   // before the drag threshold is crossed.
-  flipBook.currentPage = pointerStart.sheet * 2;
+  binding.currentPage = pointerStart.sheet * 2;
   pointerStart = null;
   requestRender();
 });
@@ -788,12 +712,12 @@ window.addEventListener("keydown", (event) => {
   if (event.key === "ArrowLeft") previousPage();
   if (event.key === "Home") {
     clearEdgePreview(true);
-    flipBook.currentPage = 0;
+    binding.currentPage = 0;
     requestRender();
   }
   if (event.key === "End") {
     clearEdgePreview(true);
-    flipBook.currentPage = flipBook.totalPages;
+    binding.currentPage = binding.totalPages;
     requestRender();
   }
 });
@@ -825,7 +749,7 @@ function applyDragFrame() {
   if (!start?.dragging) return false;
   if (start.pendingFraction === null) return true;
 
-  flipBook.progress = start.sheet + start.direction * start.pendingFraction;
+  binding.progress = start.sheet + start.direction * start.pendingFraction;
   start.pendingFraction = null;
   return true;
 }
@@ -844,26 +768,38 @@ function animate(timestamp) {
   animationFrame = null;
   const delta = Math.min((timestamp - previousFrameTime) / 1000, 0.04);
   previousFrameTime = timestamp;
-  const previousProgress = flipBook.progress;
+  const previousProgress = binding.progress;
   const dragOwnsFrame = applyDragFrame();
-  if (!dragOwnsFrame) flipBook.animate(delta);
+  if (!dragOwnsFrame) binding.animate(delta);
   const previewNeedsFrame = animateEdgePreview(delta);
   refreshDirtyPageNormals();
   updateStatus();
   renderer.render(scene, camera);
-  const progressChanged = Math.abs(previousProgress - flipBook.progress) > 1e-7;
+  const progressChanged = Math.abs(previousProgress - binding.progress) > 1e-7;
   if (previewNeedsFrame || (!dragOwnsFrame && progressChanged)) continueRendering();
 }
 
 requestRender();
 
-// TEMPORARY debug scaffold for the spine-hinge investigation — remove before commit.
-window.__passportDebug = {
-  flipBook,
-  scene,
-  camera,
-  renderer,
-  requestRender,
-  get coverSpine() { return coverSpine; },
-  setProgress(value) { flipBook.progress = value; requestRender(); },
-};
+// Test seam, not debug scaffolding: tools/invariants.html asserts the binding's
+// construction against the live scene (hinge edges, a motionless spine, sheet
+// anchors, raycast occlusion), which needs the real objects and a real GPU.
+// Inert unless a harness page sets the flag before this module runs; nothing in
+// the app or the production build ever does.
+if (globalThis.__BINDING_HARNESS__) {
+  globalThis.__binding = {
+    scene,
+    camera,
+    renderer,
+    book: binding,
+    bookRig,
+    get spine() { return binding.spineBoard; },
+    get sheetCount() { return binding.leafCount; },
+    get maxProgress() { return binding.steps; },
+    setProgress(value) {
+      binding.progress = value;
+      scene.updateMatrixWorld(true);
+      renderer.render(scene, camera);
+    },
+  };
+}

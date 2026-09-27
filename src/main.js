@@ -86,6 +86,18 @@ const rimLight = new THREE.PointLight("#ffffff", 0.45, 8, 2);
 rimLight.position.set(2.5, 1.8, -2.4);
 scene.add(rimLight);
 
+// Bounce. A sheet standing up mid-turn shows the viewer the face pointing away
+// from the key, and with only the hemisphere reaching it that face renders as
+// flat mid-grey — it reads as a shadow lying on the page when nothing is
+// casting one. This sits below the horizon and opposite the key, so it can
+// only reach faces the key cannot: every up-facing surface has n·L < 0 and
+// takes nothing from it, and the closed book is pixel-for-pixel unchanged
+// (verified by differencing the rendered closed state with the fill at 0, 0.8,
+// 1.4 and 2.0 — zero on every channel). It casts nothing.
+const fillLight = new THREE.DirectionalLight("#ffffff", 0.8);
+fillLight.position.set(2.6, -1.4, -2.5);
+scene.add(fillLight);
+
 const table = new THREE.Mesh(
   new THREE.PlaneGeometry(18, 18),
   // ShadowMaterial only ever darkens the shadowed area and is otherwise fully

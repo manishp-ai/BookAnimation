@@ -3,7 +3,9 @@ import * as MODIFIERS from "three.modifiers";
 import { FlipBook } from "quick_flipbook";
 import {
   bindingPose,
+  bindingSteps,
   caseDimensions,
+  caseLift,
   centringOffset,
   clamp,
   gutterDisplacement,
@@ -20,7 +22,9 @@ import {
 // inside the case moves independently of it: opening the book rolls the spine
 // a quarter turn onto its printed face, so it lies down on the table under the
 // gutter instead of standing on edge, and it carries the joints and the whole
-// text block with it.
+// text block with it. Reading out the far side rolls it the second quarter and
+// brings the back cover over, so the book shuts itself the other way up rather
+// than being left open on the last spread — hence the extra step in `steps`.
 //
 // Scene graph, matching how the object is actually made:
 //
@@ -318,7 +322,8 @@ export class CaseBinding extends THREE.Group {
   get sheetPivots() { return this.#pivots; }
   get coverStyle() { return this.#coverStyle; }
   get leafCount() { return this.#dimensions?.leafCount ?? 0; }
-  get steps() { return this.#dimensions ? 1 + this.#dimensions.leafCount : 0; }
+  // One step past the leaves: the reader's last turn shuts the case again.
+  get steps() { return this.#dimensions ? bindingSteps(this.#dimensions.leafCount) : 0; }
   get totalPages() { return this.steps * 2; }
   get pose() { return bindingPose(this.#progress, this.leafCount); }
 
@@ -672,7 +677,7 @@ export class CaseBinding extends THREE.Group {
       // The front cover swings; the back one stays put and behaves as the
       // sheet the whole block rests on. Both fade in from nothing, so a shut
       // book is a flat stack and t=0 looks exactly as it always has.
-      const turn = entry.outward === 1 ? pose.openAmount : 0;
+      const turn = entry.outward === 1 ? pose.openAmount : pose.closeAmount;
       // Strength is the same number the leaves get, not openAmount. A cover is
       // the outermost sheet of the book, so it has to flatten with the sheet
       // it is lying against: on the last leaf the fade takes the text block to
@@ -702,13 +707,19 @@ export class CaseBinding extends THREE.Group {
     // the whole text block going dead flat on the final leaf — a wavy book that
     // turns into a board at the end.
     const previousCurve = this.#curve.intensity;
-    this.#curve.intensity = pose.openAmount;
+    this.#curve.intensity = pose.openAmount * (1 - pose.closeAmount);
 
     this.#spine.rotation.z = pose.spineAngle;
+    // Setting the case down: past upright the spine stands on a different
+    // corner, and this is what keeps that corner on the table. It moves the
+    // whole case as one object, the way the recentring does — the spine still
+    // only ever rotates.
+    this.#book.position.y = -dimensions.spineWidth + caseLift(dimensions, pose.spineAngle);
     // Joints and pivots subtract the spine's roll, so a cover's or a leaf's
-    // attitude depends only on how far it has turned.
+    // attitude depends only on how far it has turned. The read pile therefore
+    // stays exactly where it is lying while the spine rolls up underneath it.
     this.#frontJoint.rotation.z = pose.coverAngle - pose.spineAngle;
-    this.#backJoint.rotation.z = -pose.spineAngle;
+    this.#backJoint.rotation.z = pose.backCoverAngle - pose.spineAngle;
     for (const pivot of this.#pivots) pivot.rotation.z = -pose.spineAngle;
 
     this.#engine.progress = pose.leafProgress;
@@ -722,7 +733,7 @@ export class CaseBinding extends THREE.Group {
       this.#refreshSoftCovers(pose);
     }
 
-    this.#frame.position.x = centringOffset(dimensions, pose.openAmount);
+    this.#frame.position.x = centringOffset(dimensions, pose.openAmount, pose.closeAmount);
   }
 
   get progress() { return this.#progress; }

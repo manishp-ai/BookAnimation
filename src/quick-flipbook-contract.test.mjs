@@ -156,17 +156,25 @@ test("the book is built as a case binding, with the spine as its anchor", () => 
   assert.match(binding, /this\.#frontJoint\.add\(this\.#frontCover\)/);
   assert.match(binding, /this\.#backJoint\.add\(this\.#backCover\)/);
   assert.match(binding, /pivot\.position\.set\(anchor\.x, anchor\.y, 0\)/);
-  // The spine rolls onto its face as the case opens, and that is the only
-  // thing it ever does — it is never translated.
+  // The spine rolls onto its face as the case opens and on up onto its other
+  // edge as it shuts, and rotating is the only thing it ever does — it is
+  // never translated. Setting the case down on the table is the `book` node's
+  // job, one level out, and moves the whole case as one object.
   assert.match(binding, /this\.#spine\.rotation\.z = pose\.spineAngle/);
   assert.doesNotMatch(binding, /this\.#spine\.position/);
   // Joints and pivots take the roll back out, so a cover's or a leaf's
   // attitude depends only on how far it has turned.
   assert.match(binding, /this\.#frontJoint\.rotation\.z = pose\.coverAngle - pose\.spineAngle/);
-  assert.match(binding, /this\.#backJoint\.rotation\.z = -pose\.spineAngle/);
+  assert.match(binding, /this\.#backJoint\.rotation\.z = pose\.backCoverAngle - pose\.spineAngle/);
   assert.match(binding, /pivot\.rotation\.z = -pose\.spineAngle/);
   // Recentring is presentational and lives outside the case.
   assert.match(binding, /this\.#frame\.position\.x = centringOffset\(/);
+  assert.match(binding, /this\.#book\.position\.y = -dimensions\.spineWidth \+ caseLift\(/);
+  // The reader's own travel limit and the pose's step count are the same
+  // number, taken from the same function. Spelling it out twice is how the
+  // closing step became unreachable: `progress` clamped one step short of it.
+  assert.match(binding, /get steps\(\) \{ return this\.#dimensions \? bindingSteps\(/);
+  assert.match(binding, /this\.#progress = clamp\(value, 0, this\.steps\)/);
 });
 
 test("cover stiffness is one switch and nothing else", () => {
@@ -193,7 +201,7 @@ test("a limp cover droops on the engine's own law, not one invented for it", () 
   assert.match(binding, /new THREE\.PlaneGeometry\(1, 1, subdivisions, subdivisions\)/);
   assert.match(binding, /sheet\.scale\.set\(boardWidth, 1, caseHeight\)/);
   // Fading with openAmount is what keeps a shut book flat, so t=0 is untouched.
-  assert.match(binding, /const turn = entry\.outward === 1 \? pose\.openAmount : 0/);
+  assert.match(binding, /const turn = entry\.outward === 1 \? pose\.openAmount : pose\.closeAmount/);
 });
 
 test("the pre-rebuild spine compensations are gone and stay gone", async () => {

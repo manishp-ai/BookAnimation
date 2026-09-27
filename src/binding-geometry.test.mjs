@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   bindingPose,
+  bindingSteps,
   caseDimensions,
   caseExtent,
+  caseLift,
   centringOffset,
   frontCoverAngle,
   gutterDisplacement,
@@ -220,9 +222,43 @@ test("one parameter drives the case then the leaves, with no overlap", () => {
   assert.equal(reading.leafProgress, 11.25);
 
   assert.equal(bindingPose(91, 90).leafProgress, 90);
-  assert.equal(bindingPose(500, 90).progress, 91, "clamped to the last leaf");
+  assert.equal(bindingPose(91, 90).closeAmount, 0, "the last leaf lands before the case shuts");
+  assert.equal(bindingPose(500, 90).progress, 92, "clamped to the shut case");
   assert.equal(bindingPose(-5, 90).progress, 0);
-  assert.equal(bindingPose(0, 90).steps, 91, "one opening step plus one per leaf");
+  assert.equal(bindingPose(0, 90).steps, 92, "open, one per leaf, then shut again");
+});
+
+test("the last step shuts the case again, and nothing before it does", () => {
+  for (const progress of [0, 0.5, 1, 45, 91]) {
+    assert.equal(bindingPose(progress, 90).closeAmount, 0, `nothing shuts at ${progress}`);
+  }
+  const halfShut = bindingPose(91.5, 90);
+  assert.equal(halfShut.closeAmount, 0.5);
+  assert.equal(halfShut.leafProgress, 90, "every leaf has already turned");
+  assert.equal(halfShut.coverAngle, Math.PI, "the front cover stays where the pile left it");
+  assert.equal(halfShut.backCoverAngle, Math.PI / 2, "the back cover is what comes over");
+  assert.ok(near(halfShut.spineAngle, OPEN * 1.5), "the spine carries on rolling the same way");
+
+  const shut = bindingPose(92, 90);
+  assert.equal(shut.steps, bindingSteps(90), "the pose counts its own steps");
+  assert.equal(bindingSteps(90), 92, "open, 90 leaves, shut");
+  assert.equal(shut.closeAmount, 1);
+  assert.ok(near(shut.spineAngle, Math.PI), "a half turn from cover to cover");
+  assert.equal(shut.backCoverAngle, Math.PI, "the back cover is down on the pile");
+});
+
+test("the case stays on the table through the whole half turn", () => {
+  // Past upright the spine stands on a different corner; the lift is what puts
+  // that corner on the table instead of driving the old one through it.
+  assert.equal(caseLift(dimensions, 0), 0, "closed: already resting on its own edge");
+  assert.equal(caseLift(dimensions, OPEN), 0, "flat: still resting on the same corner");
+  assert.ok(near(caseLift(dimensions, Math.PI), dimensions.spineWidth), "shut the other way up");
+  let previous = -Infinity;
+  for (let angle = 0; angle <= Math.PI + 1e-12; angle += Math.PI / 64) {
+    const lift = caseLift(dimensions, angle);
+    assert.ok(lift >= previous - 1e-12, "the case only ever rises, never drops through the table");
+    previous = lift;
+  }
 });
 
 test("the front cover swings a half turn about its joint and nothing further", () => {
@@ -243,7 +279,7 @@ test("the closed case lands exactly where the pre-rebuild book did", () => {
 
 test("the open spread stays centred, and the covers bound everything in it", () => {
   const extent = caseExtent(dimensions, OPEN, Math.PI);
-  const offset = centringOffset(dimensions, 1);
+  const offset = centringOffset(dimensions, 1, 0);
   assert.ok(near(offset + (extent.min + extent.max) / 2, 0), "centred on screen");
   // The leaves are cut inside the covers, so nothing pokes out of the spread.
   const leftmostLeaf = leafAnchorHeight && jointPosition(dimensions, "front", OPEN).x;

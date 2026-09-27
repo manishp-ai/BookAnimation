@@ -84,19 +84,39 @@ export function caseDimensions({ caseWidth, caseHeight, thickness, coverThicknes
 }
 
 /**
- * How far the spine has rolled. Closed it stands on edge at the binding edge,
- * exactly as it looks now; opening rolls it a quarter turn onto its printed
- * face so it lies on the table under the gutter, the way a real book's spine
- * does. It is still the anchor — it is never translated, and nothing inside
- * the case moves independently of it.
+ * How far the spine has rolled, per quarter turn. Closed it stands on edge at
+ * the binding edge, exactly as it looks now; opening rolls it a quarter turn
+ * onto its printed face so it lies on the table under the gutter, the way a
+ * real book's spine does. Shutting the book again at the far end rolls it a
+ * second quarter turn the same way, so it comes back up on edge with the back
+ * cover on top — a whole half turn from cover to cover.
  */
-export function spineRollAngle(openAmount) {
-  return (Math.PI / 2) * clamp(openAmount, 0, 1);
+export function spineRollAngle(amount) {
+  return (Math.PI / 2) * clamp(amount, 0, 1);
 }
 
-/** The front cover swings a half turn about its joint, and nothing else. */
-export function frontCoverAngle(openAmount) {
-  return Math.PI * clamp(openAmount, 0, 1);
+/** A cover swings a half turn about its joint, and nothing else. */
+export function frontCoverAngle(amount) {
+  return Math.PI * clamp(amount, 0, 1);
+}
+
+/**
+ * How far to set the case down so the spine keeps resting on the table.
+ *
+ * Through the first quarter turn the spine pivots on the bottom-outer edge it
+ * started on and nothing is needed. Past upright it is standing on a different
+ * corner, and rotating about the original one would drive it through the
+ * table; lifting the case by however far its lowest corner has dropped moves
+ * the contact line to the corner actually touching down. The case is set on
+ * the table, which is not the same thing as the spine being translated inside
+ * the case — the spine still only ever rotates.
+ */
+export function caseLift(dimensions, spineAngle) {
+  const { innerFaceX, spineWidth } = dimensions;
+  const corners = [[0, 0], [innerFaceX, 0], [0, spineWidth], [innerFaceX, spineWidth]];
+  let lowest = 0;
+  for (const [x, y] of corners) lowest = Math.min(lowest, rotate(x, y, spineAngle)[1]);
+  return lowest < 0 ? -lowest : 0;
 }
 
 /** Where a joint axis has got to, in book coordinates, at a given spine roll. */
@@ -223,7 +243,7 @@ export function gutterDisplacement(rise, pageProgress) {
  * only thing outside the case that follows `progress`, and the reason the
  * spine itself never needs a translation.
  */
-export function caseExtent(dimensions, spineAngle, coverAngle) {
+export function caseExtent(dimensions, spineAngle, coverAngle, backCoverAngle = 0) {
   const { innerFaceX, spineWidth, boardWidth } = dimensions;
   const front = jointPosition(dimensions, "front", spineAngle);
   const back = jointPosition(dimensions, "back", spineAngle);
@@ -235,7 +255,7 @@ export function caseExtent(dimensions, spineAngle, coverAngle) {
     front.x,
     front.x + boardWidth * Math.cos(coverAngle),
     back.x,
-    back.x + boardWidth,
+    back.x + boardWidth * Math.cos(backCoverAngle),
   ];
   return { min: Math.min(...xs), max: Math.max(...xs) };
 }
@@ -253,30 +273,49 @@ export function caseExtent(dimensions, spineAngle, coverAngle) {
  * as coming apart rather than as one book opening. Both ends still land
  * exactly where the measured rule put them.
  */
-export function centringOffset(dimensions, openAmount) {
-  const closed = caseExtent(dimensions, 0, 0);
-  const open = caseExtent(dimensions, Math.PI / 2, Math.PI);
-  const from = -(closed.min + closed.max) / 2;
-  const to = -(open.min + open.max) / 2;
-  const t = clamp(openAmount, 0, 1);
-  return from + (to - from) * (t * t * (3 - 2 * t));
+export function centringOffset(dimensions, openAmount, closeAmount = 0) {
+  const middle = (extent) => -(extent.min + extent.max) / 2;
+  const shut = middle(caseExtent(dimensions, 0, 0, 0));
+  const spread = middle(caseExtent(dimensions, Math.PI / 2, Math.PI, 0));
+  const shutAgain = middle(caseExtent(dimensions, Math.PI, Math.PI, Math.PI));
+  const ease = (t) => {
+    const u = clamp(t, 0, 1);
+    return u * u * (3 - 2 * u);
+  };
+  // Opening slides from the shut case to the spread, shutting slides on from
+  // the spread to where the case comes to rest the other way up. The second
+  // leg only ever runs once the first is finished, so the two never fight.
+  return shut + (spread - shut) * ease(openAmount) + (shutAgain - spread) * ease(closeAmount);
 }
 
 /**
- * One parameter drives the whole binding. `progress` runs 0 → 1 + leafCount:
+ * One parameter drives the whole binding. `progress` runs 0 → 2 + leafCount:
  * the first unit opens the case — front cover swinging, spine rolling down —
- * and each unit after that is one leaf turning.
+ * each unit after that is one leaf turning, and the last unit shuts the case
+ * again, bringing the back cover over the read pile and rolling the spine up
+ * onto its other edge. The book ends closed, the way it started, rather than
+ * abandoned open on the last spread.
  */
+export function bindingSteps(leafCount) {
+  return 2 + leafCount;
+}
+
 export function bindingPose(progress, leafCount) {
-  const steps = 1 + leafCount;
+  const steps = bindingSteps(leafCount);
   const clamped = clamp(progress, 0, steps);
   const openAmount = clamp(clamped, 0, 1);
+  const closeAmount = clamp(clamped - 1 - leafCount, 0, 1);
   return {
     steps,
     progress: clamped,
     openAmount,
+    closeAmount,
     leafProgress: clamp(clamped - 1, 0, leafCount),
-    spineAngle: spineRollAngle(openAmount),
+    // A half turn all told, taken in two quarters a whole text block apart.
+    spineAngle: spineRollAngle(openAmount) + spineRollAngle(closeAmount),
     coverAngle: frontCoverAngle(openAmount),
+    // The back cover is what shuts the book, so it swings on the last unit and
+    // is still for all the ones before it.
+    backCoverAngle: frontCoverAngle(closeAmount),
   };
 }

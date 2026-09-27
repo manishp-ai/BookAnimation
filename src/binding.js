@@ -606,6 +606,18 @@ export class CaseBinding extends THREE.Group {
   #attachLeafFlex(sheet, index) {
     let flex = sheet.userData.leafFlex;
     if (!flex) {
+      // A loose leaf in a book with no covers can flutter off the trim and
+      // nobody is the wiser; bound in a case, it cannot. Quick FlipBook twists
+      // a turning leaf about its own length, and because the bend has already
+      // lifted the sheet well off its plane by then, that rotation swings the
+      // tail corner a tenth of a page height past the head and tail of the
+      // case — the leaf visibly overhangs the cover mid-turn. Measured on the
+      // first leaf at half turn: the page's own height coordinate reaches
+      // -0.606 of a nominal -0.5. Scaling the twist down only scales the
+      // overhang down, so the modifier comes out of the stack. The engine
+      // still writes its angle; nothing reads it. Curl and bend, the two that
+      // make the droop, are untouched.
+      sheet.modifiers.removeModifier(sheet.twist);
       flex = new LeafFlex();
       sheet.modifiers.addModifier(flex);
       // Wrapped once per sheet and never re-wrapped: the flex reads its leaf

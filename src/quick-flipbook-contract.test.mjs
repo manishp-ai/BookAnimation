@@ -183,6 +183,21 @@ test("cover stiffness is one switch and nothing else", () => {
   assert.match(books, /"coverStyle":/);
 });
 
+// A deformer pushes a vertex off the flat sheet along the leaf's middle axis.
+// That axis has to carry the same scale as the page's width, or the droop is
+// measured in a different unit from the page it is deforming: the bent leaf
+// reaches further from its anchor than it is long, and the excess rotates
+// into the horizontal at the quarter turn and throws the fore-edge past the
+// cover. Measured before the fix: 0.0639 past a cover half-width of 0.6815,
+// and the resting pile stood 0.0167 proud of the cover's own face.
+test("a leaf's droop is measured in the same units as the leaf", () => {
+  assert.match(binding, /sheet\.scale\.set\(leafWidth, leafWidth, -caseHeight\)/);
+  // ...and the structural rise, which binding-geometry computes in world
+  // units, is converted back so the piles still land where they were told to.
+  assert.match(binding, /this\.unitScale = dimensions\.leafWidth/);
+  assert.match(binding, /gutterDisplacement\(rise, turnProgress\) \/ this\.unitScale/);
+});
+
 test("a limp cover droops on the engine's own law, not one invented for it", () => {
   // Curl and bend together. Curl alone leaves the cover dead flat at the half
   // turn, which is exactly where a limp cover is at its floppiest; the twist

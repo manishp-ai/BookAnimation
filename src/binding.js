@@ -147,6 +147,11 @@ class GutterFlex extends MODIFIERS.UserDefined {
     super();
     this.displacement = 0;
     this.range = 1;
+    // The sheet's own units per world unit along the out-of-plane axis. The
+    // rise is computed in world units by binding-geometry; the modifier writes
+    // in the sheet's. Where the two differ the rise has to be converted, or
+    // the leaf lands at the wrong height.
+    this.unitScale = 1;
     this.renderVector = (vertex) => {
       if (this.displacement === 0) return;
       const along = gutterProfile(vertex.getRatio(MODIFIERS.ModConstant.X), this.range);
@@ -157,7 +162,9 @@ class GutterFlex extends MODIFIERS.UserDefined {
   }
 
   set(rise, turnProgress, dimensions) {
-    this.displacement = gutterDisplacement(rise, turnProgress);
+    this.displacement = gutterDisplacement(rise, turnProgress) / this.unitScale;
+    // The range runs along the sheet's length as a ratio, so it is unitless
+    // and takes the world rise directly.
     this.range = gutterRange(dimensions, rise);
   }
 }
@@ -180,6 +187,11 @@ class LeafFlex extends GutterFlex {
   configure(dimensions, index) {
     this.dimensions = dimensions;
     this.index = index;
+    // The leaf's out-of-plane axis is scaled with its width, so the world
+    // rise has to be converted into the sheet's own units. Without this the
+    // structural heights binding-geometry computes — which pile rests on
+    // which cover, and how high — all come out short.
+    this.unitScale = dimensions.leafWidth;
     this.appliedRise = Number.NaN;
     this.appliedCurve = Number.NaN;
   }
@@ -599,7 +611,15 @@ export class CaseBinding extends THREE.Group {
       this.#textBlock.add(pivot);
 
       sheet.position.set(0, 0, 0);
-      sheet.scale.set(leafWidth, 1, -caseHeight);
+      // The middle term is the out-of-plane axis — everything the deformers
+      // push a vertex off the flat sheet by. Left at 1 it is measured in a
+      // different unit from the page's own width, so the droop comes out
+      // 1/leafWidth too deep: the bent leaf reaches ~9% further from its
+      // anchor than it is long, which no sheet of paper can do, and at the
+      // quarter turn that excess rotates into the horizontal and throws the
+      // fore-edge past the cover. Scaling it with the width puts the droop
+      // back in the page's own units.
+      sheet.scale.set(leafWidth, leafWidth, -caseHeight);
       this.#attachLeafFlex(sheet, index);
 
       this.#pivots.push(pivot);

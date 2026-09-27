@@ -92,3 +92,45 @@ globalThis.__profile = (pivotName, progress) => {
 };
 
 globalThis.__harnessReady = true;
+
+globalThis.__THREE = THREE;
+globalThis.__box = (name, progress) => {
+  book.setProgress(progress);
+  book.book.updateMatrixWorld(true);
+  const found = [];
+  book.book.traverse((object) => {
+    if (object.name !== name || !object.geometry?.attributes?.position) return;
+    const position = object.geometry.attributes.position;
+    const vertex = new THREE.Vector3();
+    const min = [Infinity, Infinity, Infinity];
+    const max = [-Infinity, -Infinity, -Infinity];
+    let nonFinite = 0;
+    for (let i = 0; i < position.count; i += 1) {
+      vertex.fromBufferAttribute(position, i);
+      if (!Number.isFinite(vertex.x) || !Number.isFinite(vertex.y) || !Number.isFinite(vertex.z)) {
+        nonFinite += 1;
+        continue;
+      }
+      const world = vertex.clone();
+      object.localToWorld(world);
+      for (let a = 0; a < 3; a += 1) {
+        const v = world.getComponent(a);
+        min[a] = Math.min(min[a], v);
+        max[a] = Math.max(max[a], v);
+      }
+    }
+    found.push({
+      name,
+      parent: object.parent.name,
+      nonFinite,
+      min: min.map((v) => Number(v.toFixed(4))),
+      max: max.map((v) => Number(v.toFixed(4))),
+    });
+  });
+  return found;
+};
+globalThis.__orbitShot = (name, progress, spin, tilt, halfH = 0.72, w = 900, h = 760) => {
+  book.bookRig.rotation.set(tilt, spin, 0);
+  const shot = globalThis.__capTop(name, progress, halfH, w, h);
+  return shot.finally(() => book.bookRig.rotation.set(0, 0, 0));
+};

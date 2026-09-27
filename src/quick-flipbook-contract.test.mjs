@@ -176,17 +176,16 @@ test("cover stiffness is one switch and nothing else", () => {
 });
 
 test("a limp cover droops on the engine's own law, not one invented for it", () => {
-  // Curl, bend and twist together — the three Quick FlipBook puts on a leaf.
-  // Curl alone leaves the cover dead flat at the half turn, which is exactly
-  // where a limp cover is at its floppiest.
+  // Curl and bend together. Curl alone leaves the cover dead flat at the half
+  // turn, which is exactly where a limp cover is at its floppiest; the twist
+  // is left out because on a cover it shears the case out of register.
   assert.match(binding, /function leafDeformation\(turnProgress, strength, direction = 1\)/);
   assert.match(binding, /curl: \(-1 \+ 2 \* turnProgress\) \* \(-Math\.sin\(angle\) \+ 1\) \* strength/);
   assert.match(binding, /bend: Math\.min\(-Math\.sin\(angle\) \/ 2, -1e-4\) \* direction \* strength/);
-  assert.match(binding, /twist: \(Math\.sin\(angle\) \/ 10\) \* strength/);
   assert.match(binding, /const paper = leafDeformation\(turn, pose\.openAmount\)/);
   assert.match(binding, /entry\.curl\.intensity = sign \* paper\.curl/);
   assert.match(binding, /entry\.bend\.force = sign \* paper\.bend/);
-  assert.match(binding, /entry\.twist\.angle = sign \* paper\.twist/);
+  assert.doesNotMatch(binding, /new MODIFIERS\.Twist/);
   // Unit geometry sized by the transform above it, the way a FlipPage is, so
   // the modifiers measure a cover and a leaf on the same scale.
   assert.match(binding, /new THREE\.PlaneGeometry\(1, 1, subdivisions, subdivisions\)/);

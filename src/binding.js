@@ -63,8 +63,8 @@ const SOFT_COVER_SUBDIVISIONS = 16; // same as the leaves (PAGE_SUBDIVISIONS)
 // ---------------------------------------------------------------------------
 // COVER STIFFNESS — the one place to change it.
 //
-// "soft"  limp covers: a single flexible sheet that bends, twists and curls
-//         exactly as a leaf does, the way a passport's card cover behaves.
+// "soft"  limp covers: a single flexible sheet that bends and curls the way
+//         a leaf does, as a passport's card cover behaves.
 // "rigid" boards: flat panels with real calliper, a hardcover case.
 //
 // Set per edition with `coverStyle` in src/books.js. Nothing else needs to
@@ -111,20 +111,24 @@ class PaperCurl extends MODIFIERS.UserDefined {
  *
  * Curl alone is not paper: it vanishes at the half turn, because a sheet
  * standing on edge has no height to give. What keeps a leaf limp there is the
- * bend — it peaks at exactly the point the curl disappears — and the twist
- * that stops the free corner from staying square. A cover built out of only
- * the curl is a board pretending to be paper: dead flat at ninety degrees.
+ * bend, which peaks at exactly the point the curl disappears. A cover built
+ * out of only the curl is a board pretending to be paper: dead flat at ninety
+ * degrees.
+ *
+ * Quick FlipBook's third ingredient, the twist, is deliberately left out. On a
+ * leaf it is a flourish you never look at directly; on a cover it lifts one
+ * end and drops the other, so the cover's head and tail stop lining up with
+ * the block's and the case reads as two pieces sliding past each other.
  */
 function leafDeformation(turnProgress, strength, direction = 1) {
   const angle = Math.PI * turnProgress;
   return {
     curl: (-1 + 2 * turnProgress) * (-Math.sin(angle) + 1) * strength,
     bend: Math.min(-Math.sin(angle) / 2, -1e-4) * direction * strength,
-    twist: (Math.sin(angle) / 10) * strength,
   };
 }
 
-/** Just the curl, for the leaves — the engine applies their bend and twist. */
+/** Just the curl, for the leaves — the engine applies their own bend and twist. */
 function curlIntensity(turnProgress, strength) {
   return leafDeformation(turnProgress, strength).curl;
 }
@@ -549,14 +553,10 @@ export class CaseBinding extends THREE.Group {
       const curl = new PaperCurl();
       const bend = new MODIFIERS.Bend(0, 0, 0);
       bend.constraint = MODIFIERS.ModConstant.LEFT;
-      const twist = new MODIFIERS.Twist(0);
-      twist.vector = new MODIFIERS.Vector3(2, 0, 0);
-      twist.center = new MODIFIERS.Vector3(-0.5, 0, 0);
       const stack = new MODIFIERS.ModifierStack(mesh);
       // Same order Quick FlipBook stacks them in on a leaf.
       stack.addModifier(curl);
       stack.addModifier(bend);
-      stack.addModifier(twist);
       // Which way this skin's normal points at rest. A cover's two skins face
       // opposite ways, so they take opposite forces to move together, and a
       // leaf's own normal points the other way again — which is why the leaf
@@ -565,7 +565,6 @@ export class CaseBinding extends THREE.Group {
         mesh,
         curl,
         bend,
-        twist,
         stack,
         outward,
         normalSign: outward * facing,
@@ -666,7 +665,6 @@ export class CaseBinding extends THREE.Group {
       const sign = -entry.normalSign;
       entry.curl.intensity = sign * paper.curl;
       entry.bend.force = sign * paper.bend;
-      entry.twist.angle = sign * paper.twist;
       entry.stack.apply();
       entry.mesh.geometry.computeVertexNormals();
     }
@@ -704,7 +702,7 @@ export class CaseBinding extends THREE.Group {
       this.#refreshSoftCovers(pose);
     }
 
-    this.#frame.position.x = centringOffset(dimensions, pose.spineAngle, pose.coverAngle);
+    this.#frame.position.x = centringOffset(dimensions, pose.openAmount);
   }
 
   get progress() { return this.#progress; }

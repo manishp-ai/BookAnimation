@@ -240,9 +240,26 @@ export function caseExtent(dimensions, spineAngle, coverAngle) {
   return { min: Math.min(...xs), max: Math.max(...xs) };
 }
 
-export function centringOffset(dimensions, spineAngle, coverAngle) {
-  const extent = caseExtent(dimensions, spineAngle, coverAngle);
-  return -(extent.min + extent.max) / 2;
+/**
+ * How far to slide the whole composition so it stays in frame: from the closed
+ * case centred on itself to the open spread centred on its gutter.
+ *
+ * Eased between those two ends rather than measured live. Measuring the case's
+ * extent every frame sounds more principled and is worse to watch: the front
+ * cover's reach folds back through the joint as it passes upright, so the
+ * measured midpoint barely moves for the first half of the opening and then
+ * lurches half a page sideways in the second. On screen the text block sits
+ * still, then bolts to the right while the cover swings left, and the two read
+ * as coming apart rather than as one book opening. Both ends still land
+ * exactly where the measured rule put them.
+ */
+export function centringOffset(dimensions, openAmount) {
+  const closed = caseExtent(dimensions, 0, 0);
+  const open = caseExtent(dimensions, Math.PI / 2, Math.PI);
+  const from = -(closed.min + closed.max) / 2;
+  const to = -(open.min + open.max) / 2;
+  const t = clamp(openAmount, 0, 1);
+  return from + (to - from) * (t * t * (3 - 2 * t));
 }
 
 /**

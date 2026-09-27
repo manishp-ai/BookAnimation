@@ -236,14 +236,14 @@ test("the closed case lands exactly where the pre-rebuild book did", () => {
   const extent = caseExtent(dimensions, 0, 0);
   assert.ok(near(extent.min, 0), "the spine's printed face is the case's left edge");
   assert.ok(near(extent.max, EDITION.caseWidth), "the fore edge is one page width away");
-  const offset = centringOffset(dimensions, 0, 0);
+  const offset = centringOffset(dimensions, 0);
   assert.ok(near(offset + extent.min, -EDITION.caseWidth / 2), "left edge centred as before");
   assert.ok(near(offset + extent.max, EDITION.caseWidth / 2), "right edge centred as before");
 });
 
 test("the open spread stays centred, and the covers bound everything in it", () => {
   const extent = caseExtent(dimensions, OPEN, Math.PI);
-  const offset = centringOffset(dimensions, OPEN, Math.PI);
+  const offset = centringOffset(dimensions, 1);
   assert.ok(near(offset + (extent.min + extent.max) / 2, 0), "centred on screen");
   // The leaves are cut inside the covers, so nothing pokes out of the spread.
   const leftmostLeaf = leafAnchorHeight && jointPosition(dimensions, "front", OPEN).x;

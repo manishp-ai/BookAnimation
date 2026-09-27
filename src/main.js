@@ -69,10 +69,14 @@ keyLight.castShadow = true;
 keyLight.shadow.mapSize.set(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
 keyLight.shadow.camera.near = 0.1;
 keyLight.shadow.camera.far = 14;
-keyLight.shadow.camera.left = -3;
-keyLight.shadow.camera.right = 3;
-keyLight.shadow.camera.top = 3;
-keyLight.shadow.camera.bottom = -3;
+// Fitted to the book plus the reach of an open cover, not to the whole table.
+// A +/-3 frustum spent 1024 texels on 6 units — about 6mm per texel, coarse
+// enough that the cover's shadow came back as a blocky wedge with a stepped
+// edge. Same light, same softness, four times the resolution where it lands.
+keyLight.shadow.camera.left = -1.2;
+keyLight.shadow.camera.right = 1.2;
+keyLight.shadow.camera.top = 1.2;
+keyLight.shadow.camera.bottom = -1.2;
 keyLight.shadow.bias = -0.00025;
 keyLight.shadow.normalBias = 0.012;
 keyLight.shadow.radius = 3;

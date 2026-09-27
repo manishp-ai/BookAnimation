@@ -273,11 +273,11 @@ export class CaseBinding extends THREE.Group {
   #stepSize = 0;
   #page = 0;
   #appliedSpineAngle = Number.NaN;
-  // Shared with every leaf's flip wrapper. Quick FlipBook fades the page curl
-  // out over the first and last sheet, on the assumption that those sheets are
-  // the covers and the book is shut behind them. Here the case is what shuts,
-  // so the fade follows the case opening instead — otherwise the whole text
-  // block sits dead flat the moment the cover is open.
+  // Shared with every leaf's flip wrapper and with the covers. Quick FlipBook
+  // fades the page curl out over the first and last sheet, on the assumption
+  // that those sheets are the covers and the book is shut behind them. Here
+  // the case is what shuts, so this follows the case and only the case: full
+  // droop from the moment it is open until the moment it closes again.
   #curve = { intensity: 0 };
   #onSheetDeformed = null;
 
@@ -695,11 +695,14 @@ export class CaseBinding extends THREE.Group {
 
     // One parameter. The spine rolls down, the front cover swings about its own
     // joint, and the leaves are driven from the same number through the engine.
-    // The curl fades in as the case opens, and back out over the last leaf the
-    // way Quick FlipBook fades it over its own last sheet.
-    const leafTail = dimensions.leafCount - pose.leafProgress;
+    // The curl follows the case: in as it opens, out as it shuts, and nothing
+    // else. Quick FlipBook additionally fades its curl out over the last sheet,
+    // because in a bare stack the last sheet is the back cover and the book is
+    // shut behind it. Here the case is what shuts, and copying that fade left
+    // the whole text block going dead flat on the final leaf — a wavy book that
+    // turns into a board at the end.
     const previousCurve = this.#curve.intensity;
-    this.#curve.intensity = pose.openAmount * clamp(leafTail, 0, 1);
+    this.#curve.intensity = pose.openAmount;
 
     this.#spine.rotation.z = pose.spineAngle;
     // Joints and pivots subtract the spine's roll, so a cover's or a leaf's

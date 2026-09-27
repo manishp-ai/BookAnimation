@@ -116,6 +116,18 @@ test("3D Book 2 renders soft dynamic shadows and refreshes every deformed sheet'
   assert.match(main, /object\.castShadow = object\.userData\.shadowCaster !== false/);
   assert.match(main, /object\.receiveShadow = true/);
   assert.match(binding, /mesh\.userData\.shadowCaster = facing === 1/);
+  // ...and for a leaf lying in its pile. Ninety sheets 0.4mm apart inside a
+  // shadow map that resolves 2.3mm per texel cannot be told apart by depth,
+  // so they acne against each other into one hard grey slab across the
+  // spread. Only the leaf actually lifted off its pile casts; the covers and
+  // spine, far enough apart to resolve, still draw the outline on the table.
+  assert.match(binding, /#refreshLeafShadows\(\) \{/);
+  assert.match(binding, /const lifted = turn > CaseBinding\.#LIFT_EPSILON && turn < 1 - CaseBinding\.#LIFT_EPSILON/);
+  assert.match(binding, /if \(object\.isMesh\) object\.castShadow = lifted/);
+  assert.match(binding, /if \(object\.isMesh\) object\.userData\.shadowCaster = false/);
+  // Outside the redeform guard: a leaf finishing its turn has to stop casting
+  // even on a frame where no leaf needed re-deforming.
+  assert.match(binding, /this\.#refreshLeafShadows\(\);\n\n    if \(pose\.spineAngle !== this\.#appliedSpineAngle/);
   assert.match(main, /dirtySheets\.add\(sheet\)/);
   assert.match(main, /for \(const sheet of dirtySheets\)/);
   assert.match(main, /refreshDirtyPageNormals\(\)/);

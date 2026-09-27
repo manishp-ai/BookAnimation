@@ -620,6 +620,13 @@ export class CaseBinding extends THREE.Group {
       // fore-edge past the cover. Scaling it with the width puts the droop
       // back in the page's own units.
       sheet.scale.set(leafWidth, leafWidth, -caseHeight);
+      // Off by default; #refreshLeafShadows switches on whichever leaf is
+      // actually lifted. The flag is what keeps the reader's own one-time
+      // "everything casts" traversal from turning the whole pile back on.
+      sheet.traverse((object) => {
+        if (object.isMesh) object.userData.shadowCaster = false;
+      });
+      sheet.userData.shadowLifted = null;
       this.#attachLeafFlex(sheet, index);
 
       this.#pivots.push(pivot);
@@ -666,6 +673,9 @@ export class CaseBinding extends THREE.Group {
   // ninety leaves on every single frame.
   static #RISE_EPSILON = 0.0004;
   static #CURVE_EPSILON = 0.01;
+  // Below this a leaf has barely left its pile, so the shadow it would cast
+  // still lies under itself — switching it on here cannot pop.
+  static #LIFT_EPSILON = 0.01;
 
   /**
    * The spine rolling changes every leaf's climb out of the gutter without
@@ -688,6 +698,27 @@ export class CaseBinding extends THREE.Group {
       sheet.pageCurve.intensity = curlIntensity(flex.pageProgress, curve);
       sheet.modifiers.apply();
       this.#onSheetDeformed?.(sheet);
+    }
+  }
+
+  // A leaf lying in its pile is one sheet inside what is optically a solid
+  // block of paper. The block's own silhouette is the shadow; the leaf adds
+  // nothing to it. What it does add is artefact: ninety sheets sit 0.4mm
+  // apart inside the text block, and the shadow map resolves 2.3mm per texel,
+  // so a flat leaf's depth is indistinguishable from its neighbours' and they
+  // acne against each other into one hard grey slab laid across the spread.
+  // Only a leaf actually lifted off its pile has a shadow worth casting; the
+  // covers and the spine, which are far enough apart to resolve, still draw
+  // the book's outline on the table.
+  #refreshLeafShadows() {
+    for (const sheet of this.#sheets) {
+      const turn = sheet.userData.leafFlex.pageProgress;
+      const lifted = turn > CaseBinding.#LIFT_EPSILON && turn < 1 - CaseBinding.#LIFT_EPSILON;
+      if (sheet.userData.shadowLifted === lifted) continue;
+      sheet.userData.shadowLifted = lifted;
+      sheet.traverse((object) => {
+        if (object.isMesh) object.castShadow = lifted;
+      });
     }
   }
 
@@ -746,6 +777,9 @@ export class CaseBinding extends THREE.Group {
     // The engine still stacks its sheets in y for books that have no spine to
     // hang them from; here that job belongs to the anchors, so drop it.
     for (const sheet of this.#sheets) sheet.position.set(0, 0, 0);
+    // Outside the redeform guard below: a leaf reaching the end of its turn
+    // has to stop casting even on a frame where nothing needed re-deforming.
+    this.#refreshLeafShadows();
 
     if (pose.spineAngle !== this.#appliedSpineAngle || this.#curve.intensity !== previousCurve) {
       this.#appliedSpineAngle = pose.spineAngle;

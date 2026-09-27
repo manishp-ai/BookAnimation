@@ -63,104 +63,39 @@ test("returning to flat takes the short way, not a multi-turn wind-back", () => 
   assert.ok(Math.abs(shortestAngleTo(0.1, 0)) < 1e-9, "a small offset settles exactly at the target");
 });
 
-// Geometry of the arc these tests describe, in the flip book's own local
-// space: a circular cross-section of `radius` centred at (centerX, centerY),
-// swept from thetaStart through thetaLength, with theta measured from the
-// crown (+Y) toward +X. The crown is the highest point; the two joints are
-// its ends, and they are where the sheets hinge.
-const spinePoint = (spine, theta) => ({
-  x: spine.centerX + spine.radius * Math.sin(theta),
-  y: spine.centerY + spine.radius * Math.cos(theta),
-});
-const spineJoints = (spine) => [
-  spinePoint(spine, spine.thetaStart),
-  spinePoint(spine, spine.thetaStart + spine.thetaLength),
-];
-const spineCrown = (spine) => spinePoint(spine, spine.thetaStart + spine.thetaLength / 2);
-
-test("the spine's width across the book is the page block's real measured thickness", () => {
+test("the spine's thickness is the book's real measured page-stack extent, flush at the hinge", () => {
   const bounds = { minX: 0, minY: -0.036, maxY: 0, minZ: -0.5, maxZ: 0.5 };
   const spine = spineGeometryFromBounds(bounds, 1);
   assert.ok(Math.abs(spine.thickness - 0.036) < 1e-9, "thickness is the book's real page-stack extent, not a constant");
   assert.ok(Math.abs(spine.depth - 1.0) < 1e-9, "depth reaches head to tail, ending exactly at the cover's top and bottom");
-  // A binder cuts a spine to the width of the block it binds. The previous
-  // build put the board thickness on this axis and the block thickness on
-  // Y, which stood the strip on its long edge as a wall facing the camera.
-  const [left, right] = spineJoints(spine);
-  assert.ok(
-    Math.abs((right.x - left.x) - spine.thickness) < 1e-9,
-    "joint to joint spans the real page-stack thickness, not a sliver of it",
-  );
+  assert.equal(spine.centerX - spine.widthLocal / 2, 0, "the outer face sits flush at the hinge, never past it");
 });
 
-test("the spine lies base-down: its round rises far less than it spans", () => {
+test("the spine reads as a flat sheet, not a square rod: its top-down width is a small fraction of its real thickness", () => {
   const bounds = { minX: 0, minY: -0.036, maxY: 0, minZ: -0.5, maxZ: 0.5 };
   const spine = spineGeometryFromBounds(bounds, 1);
-  const [left] = spineJoints(spine);
-  const rise = spineCrown(spine).y - left.y;
-  assert.ok(rise > 0, "the round crowns above its joints rather than lying dead flat");
-  assert.ok(
-    rise < spine.width * 0.5,
-    "base toward the pages: the round rises well under half its own span, so it never presents a wall",
-  );
+  assert.ok(spine.widthLocal < spine.thickness * 0.5, "flat, not square: width is well under half the thickness");
 });
 
-test("the sheets hinge off the spine's two joints, one on each side of the hinge line", () => {
-  const bounds = { minX: 0, minY: -0.036, maxY: 0, minZ: -0.5, maxZ: 0.5 };
-  const spine = spineGeometryFromBounds(bounds, 1);
-  const [left, right] = spineJoints(spine);
-  assert.ok(left.x < bounds.minX, "one joint sits outboard of the hinge line");
-  assert.ok(right.x > bounds.minX, "the other sits inboard of it");
-  assert.ok(
-    Math.abs((left.x + right.x) / 2 - bounds.minX) < 1e-9,
-    "the round straddles the hinge line, so the joint lands in the same place whichever way a sheet swings",
-  );
-});
-
-test("scaleX only stretches the book's width, so the spine counter-scales it back out", () => {
+test("scaleX only stretches the book's width, so the spine's top-down width is counter-scaled to keep its true fraction of the side thickness", () => {
   const bounds = { minX: 0, minY: -0.036, maxY: 0, minZ: -0.5, maxZ: 0.5 };
   const scaleX = 0.6667;
-  const stretched = spineGeometryFromBounds(bounds, scaleX);
-  const square = spineGeometryFromBounds(bounds, 1);
+  const narrowed = spineGeometryFromBounds(bounds, scaleX);
+  const flat = spineGeometryFromBounds(bounds, 1);
   assert.ok(
-    Math.abs(stretched.width - square.width) < 1e-9,
-    "the width is a thickness, so the page aspect ratio must not change it",
-  );
-  assert.ok(
-    Math.abs(stretched.scaleX * scaleX - 1) < 1e-9,
-    "the mesh's own X scale cancels the flip book's page-aspect stretch exactly",
-  );
-  assert.ok(
-    Math.abs(stretched.cropFraction * scaleX - square.cropFraction) < 1e-9,
-    "the art crop is taken in page-width units, so it counter-scales with it",
+    Math.abs(narrowed.widthLocal * scaleX - flat.widthLocal) < 1e-9,
+    "the local width, once scaled back down by scaleX, reads as the same on-screen flatness regardless of the page aspect ratio",
   );
 });
 
-test("both joints clear the cover plane, so neither half of the round is buried by the page stack", () => {
+test("the spine's bottom face is flush with the real cover edge, with only a hairline of overhang at the top to win the top-down depth test", () => {
   const bounds = { minX: 0, minY: -0.036, maxY: 0, minZ: -0.5, maxZ: 0.5 };
   const spine = spineGeometryFromBounds(bounds, 1);
-  const [left, right] = spineJoints(spine);
-  // A flipped sheet drops to the bottom of the stack while unflipped leaves
-  // stay at the top. A round hanging below the cover plane is therefore
-  // occluded unequally on its two sides and reads as half a strip, so both
-  // joints — not just the crown — have to win the depth test.
-  assert.ok(left.y > bounds.maxY, "the outboard joint is proud of the cover plane");
-  assert.ok(right.y > bounds.maxY, "so is the inboard one");
-  assert.ok(
-    spineCrown(spine).y - bounds.maxY < spine.thickness * 0.5,
-    "the whole round still hugs the cover: its crown is a fraction of the block, not a bump on top of it",
-  );
-});
-
-test("the art is cropped to the arc's developed length, so it wraps the round without stretching", () => {
-  const bounds = { minX: 0, minY: -0.036, maxY: 0, minZ: -0.5, maxZ: 0.5 };
-  const spine = spineGeometryFromBounds(bounds, 1);
-  const arcLength = spine.radius * spine.thetaLength;
-  assert.ok(
-    Math.abs(spine.cropFraction - arcLength) < 1e-9,
-    "the crop follows the surface the texture actually covers, not the chord beneath it",
-  );
-  assert.ok(arcLength > spine.width, "a curved surface is longer than the straight line across it");
+  const bottom = spine.centerY - spine.boxHeight / 2;
+  const top = spine.centerY + spine.boxHeight / 2;
+  assert.ok(Math.abs(bottom - bounds.minY) < 1e-9, "flush at the real minY, not floating above the cover");
+  assert.ok(top > bounds.maxY, "a hairline proud of maxY, enough to win the depth test against the opaque page");
+  assert.ok(top - bounds.maxY < spine.thickness * 0.5, "the overhang is a sliver, not a visible bump");
 });
 
 test("page count changes the spine's thickness, since it's a real measurement, not a fixed hinge", () => {

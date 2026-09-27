@@ -46,7 +46,6 @@ const PAGE_SUBDIVISIONS = 16;
 const MAX_TEXTURE_EDGE = 1024;
 const MAX_TEXTURE_ANISOTROPY = 4;
 const CACHED_BOOK_LIMIT = 2;
-const SPINE_ROUND_SEGMENTS = 24;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color("#ffffff");
@@ -112,17 +111,19 @@ flipBook.traverse((object) => {
 });
 bookRig.add(flipBook);
 
-// The spine is the rounded base the covers are bound to, carrying the front
-// cover's own art wrapped around the bound edge, so it reads as the same
+// The spine is nothing but the front cover's own art, wrapped: a narrow strip
+// cropped from the cover artwork's hinge-side edge, so it reads as the same
 // cover material continuing around the book's actual edge rather than a
-// separate designed object. It lies base-down across the hinge line — width
-// across the book is the page block's real measured thickness — and it never
-// rotates: the sheets swing off its two joints the way real boards do, and
-// the round itself stays exactly where the closed book left it. Because it's
-// a child of flipBook it inherits that object's own position hack (the one
-// keeping the visual hinge fixed on screen while pages turn) automatically,
-// so — as in a real bound book — it stays at the gutter and stays visible
-// whether the book is closed or open.
+// separate designed object. It's a box exactly as thin as the book's own
+// measured thickness on every axis (never wider than the cover's real edge,
+// so it can't protrude past the cover's silhouette), sized from the closed
+// book's own measured bounds: it spans the full head-to-tail height (ending
+// exactly at the cover's top and bottom) and the full real page-stack
+// thickness (filling the gap between front and back flush, no seam).
+// Because it's a child of flipBook it inherits that object's own
+// position hack (the one keeping the visual hinge fixed on screen while
+// pages turn) automatically, so — as in a real bound book — it stays at the
+// gutter and stays visible whether the book is closed or open.
 let coverSpine = null;
 let coverSpineTexture = null;
 
@@ -132,27 +133,17 @@ function makeSpineStripTexture(coverMap, widthFraction) {
   const sourceHeight = image?.height ?? image?.naturalHeight ?? 0;
   if (!image || !sourceWidth || !sourceHeight) return null;
 
-  // The strip straddles the hinge, so it carries the cover's own hinge-side
-  // columns mirrored about that line — the way a bound cover's material
-  // folds over the edge. Mirroring is what keeps the seam closed: the half
-  // lying over the cover reproduces exactly the pixels the cover shows
-  // underneath it, at the cover's own scale, so the art cannot step or
-  // stretch at the joint at any opening angle.
-  const halfWidth = Math.max(1, Math.round((sourceWidth * widthFraction) / 2));
+  const cropWidth = Math.max(1, Math.round(sourceWidth * widthFraction));
   const canvas = document.createElement("canvas");
-  canvas.width = halfWidth * 2;
+  canvas.width = cropWidth;
   canvas.height = sourceHeight;
   const context = canvas.getContext("2d");
   if (!context) return null;
   // The hinge-side edge of the front cover art (its left edge, since the
-  // book opens toward +X and every sheet hinges on the cover's min-X side) is
+  // book opens toward +X and the hinge sits at the cover's min-X side) is
   // what a real cover's cloth would wrap around the spine — so that's the
   // slice taken, at the cover's own resolution, no invented content.
-  context.save();
-  context.scale(-1, 1);
-  context.drawImage(image, 0, 0, halfWidth, sourceHeight, -halfWidth, 0, halfWidth, sourceHeight);
-  context.restore();
-  context.drawImage(image, 0, 0, halfWidth, sourceHeight, halfWidth, 0, halfWidth, sourceHeight);
+  context.drawImage(image, 0, 0, cropWidth, sourceHeight, 0, 0, cropWidth, sourceHeight);
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -191,31 +182,21 @@ function rebuildCoverSpine(coverMap) {
   );
   if (spine.thickness <= 0) return;
 
-  coverSpineTexture = makeSpineStripTexture(coverMap, spine.cropFraction);
+  coverSpineTexture = makeSpineStripTexture(coverMap, spine.widthLocal);
   const spineMaterial = makePaperMaterial(coverSpineTexture);
   spineMaterial.side = THREE.DoubleSide;
 
-  // An arc lying base-down across the gutter, swept along the book's
-  // head-to-tail axis: the round of the spine, presenting its curve to the
-  // top-down camera and its two joints to the sheets that hinge off them.
-  // Open-ended because only the round is ever seen — the arc's own ends face
-  // the book's head and tail, which the page block already fills.
+  // A box, not a flat face: the top-down camera looks straight down the Y
+  // axis, so a zero-thickness face standing edge-on to it (any orientation
+  // other than flat) projects to zero area and simply doesn't render. Its
+  // real top face (visible from above, filling the gutter) and side faces
+  // (visible once rotated) read as a flat sheet, not a square rod, because
+  // its top-down width is a small fraction of its real thickness rather than
+  // matching it (see SPINE_FLATNESS in orbit.js).
   coverSpine = new THREE.Mesh(
-    new THREE.CylinderGeometry(
-      spine.radius,
-      spine.radius,
-      spine.depth,
-      SPINE_ROUND_SEGMENTS,
-      1,
-      true,
-      spine.thetaStart,
-      spine.thetaLength,
-    ),
+    new THREE.BoxGeometry(spine.widthLocal, spine.boxHeight, spine.depth),
     spineMaterial,
   );
-  // Stands the arc's axis along the book's head-to-tail run, crown up.
-  coverSpine.rotation.x = -Math.PI / 2;
-  coverSpine.scale.x = spine.scaleX;
   coverSpine.position.set(spine.centerX, spine.centerY, spine.centerZ);
   coverSpine.castShadow = false;
   coverSpine.receiveShadow = true;

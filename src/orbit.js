@@ -59,66 +59,44 @@ export class OrbitSpring {
   }
 }
 
-// The spine is the flat base the covers hinge off, carrying the front
-// cover's own art wrapped around the bound edge — not a separate designed
-// object. `bounds` is the closed book's measured extent in the flip book's
-// own local space (every sheet hinges on the line at min-X; PassportBook
-// opens toward +X). `scaleX` is the flip book's own X-axis scale (the page
-// aspect ratio) — it only stretches the book's width, not its thickness.
+// The spine is nothing but the front cover's own art, cropped to a sliver
+// exactly as wide as the book's own measured thickness — not a separate
+// designed object. `bounds` is the closed book's measured extent in the flip
+// book's own local space (the hinge sits at min-X; PassportBook opens toward
+// +X, so that's the fixed edge the spine sits flush against). `scaleX` is
+// the flip book's own X-axis scale (the page aspect ratio) — it only
+// stretches the book's width, not its thickness.
 //
-// Which axis carries which measurement is the whole of it. A spine's width
-// across the book *is* the page block's thickness — that is what the binder
-// cuts it to — and its own height is only the cover board glued to it. The
-// previous build had those two swapped: the board thickness went on X and
-// the full block thickness on Y, so the strip stood on its long edge at the
-// gutter and presented a flat rectangular wall to a camera looking straight
-// down at it. Base toward the pages: board on Y, block on X.
-// How far the spine's round rises above the joints it runs between, as a
-// fraction of its own width — a bound spine is rounded, not a flat plate, and
-// that curve is what reads as structure rather than a rectangle pasted into
-// the gutter.
-const SPINE_ROUND_RATIO = 0.2;
+// The two cross-axes read very differently: Y is the book's real, honest
+// page-stack thickness (how many leaves are inside — it should stay exactly
+// that, unshrunk). X is only ever seen edge-on, standing in for "how wide is
+// the flat wrap of cover material" — sizing it to equal the real thickness
+// made the two axes equal, which reads as a chunky square rod instead of a
+// thin flat sheet the pages are glued to. Keeping X a small fraction of the
+// real thickness is what makes it read as flat.
+const SPINE_FLATNESS = 0.2; // X-width as a fraction of the real Y-thickness
 
 export function spineGeometryFromBounds({ minX, minY, maxY, minZ, maxZ }, scaleX) {
   const thickness = maxY - minY;
-  // A spine's width across the book *is* the page block's thickness. Both are
-  // unscaled measurements, so the mesh counter-scales `scaleX` back out (see
-  // `scaleX` below) rather than pre-dividing here.
-  const width = thickness;
-  const rise = width * SPINE_ROUND_RATIO;
-  // The circular arc through both joints and the crown: chord `width`,
-  // sagitta `rise`. Sweeping it along the book's head-to-tail axis gives a
-  // surface whose normal turns continuously from one sheet to the other, so
-  // the round shades as one curve instead of stepping at a hard edge.
-  const radius = ((width * width) / 4 + rise * rise) / (2 * rise);
-  const halfSweep = Math.asin(Math.min(1, width / 2 / radius));
-  // Both joints — not just the crown — clear the closed cover's own plane by
-  // a hairline, so the whole round sits on top of the block and wins the
-  // depth test along its full width. Hanging the joints below that plane
-  // instead buries whichever half of the round the page stack happens to lie
-  // over: the flipped cover drops to the bottom of the stack while the
-  // unflipped leaves stay at the top, so the two halves would be occluded
-  // unequally and the spine would read as half a strip.
-  const clearance = rise * 0.02;
+  const widthLocal = (thickness * SPINE_FLATNESS) / scaleX;
+  // Y is this scene's top-down camera's own viewing axis, and the open
+  // pages' own geometry reaches all the way to the hinge at Y values inside
+  // this same envelope — so a box with the same span ties in the depth test
+  // almost everywhere and the opaque page wins, hiding the spine under
+  // itself. The fix is a hairline of overhang at the *top* only, winning
+  // that tie — not floating the whole box above the envelope, which would
+  // detach it from the cover's real position and read as misplaced in the
+  // closed/rotated exterior view. The bottom face stays flush at the real
+  // minY, exactly where the cover's own edge is.
+  const clearance = thickness * 0.05;
+  const boxHeight = thickness + clearance;
   return {
     thickness,
-    width,
-    rise,
-    radius,
-    thetaStart: -halfSweep,
-    thetaLength: halfSweep * 2,
+    widthLocal,
+    boxHeight,
     depth: maxZ - minZ,
-    // The wrap is textured across its developed arc length, not its chord, so
-    // the art runs over the round at the cover's own scale without stretch.
-    cropFraction: (radius * halfSweep * 2) / scaleX,
-    // Cancels the flip book's page-aspect stretch, which applies to widths
-    // and not to thicknesses.
-    scaleX: 1 / scaleX,
-    // Straddling the hinge line, so a sheet swinging off either side leaves
-    // the joint in the same place at every angle — one continuous transition
-    // from base into sheet, with nothing standing between them.
-    centerX: minX,
+    centerX: minX + widthLocal / 2,
     centerZ: (minZ + maxZ) / 2,
-    centerY: maxY + clearance + rise - radius,
+    centerY: minY + boxHeight / 2,
   };
 }

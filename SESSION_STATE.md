@@ -1,10 +1,10 @@
-# Session State — updated 2026-09-28 03:10
+# Session State — updated 2026-09-28 04:05
 
 Status: IN PROGRESS
 Task: Fix the faults Boss reported — the book going stiff at the final
 cover, never shutting again at the end, pages escaping the covers during a
 turn, and a grey shadow slab lying across the sheets.
-Branch / worktree: `fix/passport-spine-hinge`   Recovery point: `9327e63`
+Branch / worktree: `fix/passport-spine-hinge`   Recovery point: `0f47067`
 
 Done:
 - The last leaf no longer fades its curl out. `#apply()` sets
@@ -45,6 +45,22 @@ Done:
   position, exactly 1 mid-turn. The remaining mid-turn shadow is the raised
   page's own on the pile below (5.5% of frame, no self-acne) and is real.
 
+- Covers drawing over the pages (`0f47067`) — my own regression from
+  ddfd4e4, which Boss caught. Scaling the leaf node's out-of-plane axis was
+  too blunt: it carries the bend, the curl and the gutter flex alike, and
+  only the bend needed shrinking. Reverted the node scale and the unitScale
+  plumbing; scaled the bend alone via `#BEND_DEPTH = 0.58`, bisected against
+  the live scene (0.5969 fails by 0.0001, 0.5953 is clean). Overhang still
+  0; resting pile back to 0.0382 above the pastedown's 0.0215.
+- Creases down the spread (`43297c1`). A resting leaf curves out to ratio
+  0.813 — quick_flipbook's own effectRange — and is flat beyond. At 16
+  subdivisions that tail is four vertices and the facets read as two hard
+  lines. Upstream runs the same 16 and the same curl but hides it under
+  photographs; these pages are near-white. PAGE_SUBDIVISIONS 16 -> 24, soft
+  covers with them. 40 chokes the renderer at ninety leaves; 24 holds 6.9ms
+  median / 7.1ms p95 frames and a 44ms first paint. Both earlier fixes
+  re-verified at the finer mesh.
+
 In flight:
 - Nothing. Tree builds and tests clean, all work committed.
 
@@ -56,7 +72,14 @@ Not started:
 - CHANGELOG entry for the case-binding rebuild.
 
 Blocked on:
-- Nothing.
+- "Pages going behind the cover on a turn." Could not reproduce anything
+  significant. Comparing leaf height against the cover's height at matching
+  x, across the first, middle and last turns, the cover stands above the
+  leaves by 0.0004 almost everywhere — that is PASTEDOWN_LIFT, by design —
+  and by at most 0.0060 near the gutter as the very last leaf turns. Nothing
+  at the fore-edge. Need Boss to say which moment shows it before changing
+  anything; an earlier blind fix here is exactly what caused the 0f47067
+  regression.
 
 Danger:
 - Temporary tooling still in the tree and partly committed: `_shots/`,

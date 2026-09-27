@@ -89,13 +89,19 @@ scene.add(rimLight);
 // Bounce. A sheet standing up mid-turn shows the viewer the face pointing away
 // from the key, and with only the hemisphere reaching it that face renders as
 // flat mid-grey — it reads as a shadow lying on the page when nothing is
-// casting one. This sits below the horizon and opposite the key, so it can
-// only reach faces the key cannot: every up-facing surface has n·L < 0 and
+// casting one. This sits opposite the key and just below the horizon, so it
+// can only reach faces the key cannot: every up-facing surface has n·L < 0 and
 // takes nothing from it, and the closed book is pixel-for-pixel unchanged
-// (verified by differencing the rendered closed state with the fill at 0, 0.8,
-// 1.4 and 2.0 — zero on every channel). It casts nothing.
+// (verified by differencing the rendered closed state against the no-fill
+// baseline — zero on every channel). It casts nothing.
+//
+// Only just below: at y = -1.4 it fronted the underside of the case squarely
+// and washed the shading off it, so the two covers read as one rigid printed
+// card from underneath instead of as sheets with a curve in them. Level with
+// the table it grazes — strong on the near-vertical faces it is there for,
+// weak (n·L ~ 0.09) on anything facing straight down.
 const fillLight = new THREE.DirectionalLight("#ffffff", 0.8);
-fillLight.position.set(2.6, -1.4, -2.5);
+fillLight.position.set(2.9, -0.35, -2.8);
 scene.add(fillLight);
 
 const table = new THREE.Mesh(

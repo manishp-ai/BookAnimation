@@ -135,7 +135,12 @@ test("3D Book 2 renders soft dynamic shadows and refreshes every deformed sheet'
 });
 
 test("3D Book 2 bounds geometry, pixel, shadow, and texture work", () => {
-  assert.match(main, /const PAGE_SUBDIVISIONS = 16/);
+  // 24, not the upstream 16. The page's curl dies out over its outer fifth,
+  // and at 16 that tail is four vertices: the facets read as two hard lines
+  // down an otherwise smooth spread. Upstream hides them under photographs;
+  // these pages are near-white, so they show. 40 chokes the renderer at
+  // ninety leaves -- 24 holds 6.9ms median frames and a 44ms first paint.
+  assert.match(main, /const PAGE_SUBDIVISIONS = 24/);
   assert.match(main, /const MAX_PIXEL_RATIO = 1\.5/);
   assert.match(main, /const SHADOW_MAP_SIZE = 1024/);
   assert.match(main, /const MAX_TEXTURE_EDGE = 1024/);

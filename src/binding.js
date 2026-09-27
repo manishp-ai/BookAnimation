@@ -62,7 +62,7 @@ import {
 // invisible and is comfortably resolvable.
 const PASTEDOWN_LIFT = 0.0004;
 const LINER_LIFT = 0.0004;
-const SOFT_COVER_SUBDIVISIONS = 16; // same as the leaves (PAGE_SUBDIVISIONS)
+const SOFT_COVER_SUBDIVISIONS = 24; // same as the leaves (PAGE_SUBDIVISIONS)
 
 // ---------------------------------------------------------------------------
 // COVER STIFFNESS — the one place to change it.

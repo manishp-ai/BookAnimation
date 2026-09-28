@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import * as MODIFIERS from "three.modifiers";
 import { FlipBook } from "quick_flipbook";
+import { drawSpineLabel, normaliseSpineLabel } from "./spine-label.js";
 import {
   bindingPose,
   bindingSteps,
@@ -63,6 +64,19 @@ import {
 const PASTEDOWN_LIFT = 0.0004;
 const LINER_LIFT = 0.0004;
 const SOFT_COVER_SUBDIVISIONS = 24; // same as the leaves (PAGE_SUBDIVISIONS)
+// Floor width, in texels, for a spine strip that has to carry type.
+const SPINE_LABEL_MIN_PX = 224;
+// How the spine board's outward face (-x, BoxGeometry face 1) reads its
+// texture.
+const SPINE_FACE_UV = { u: { axis: "y", flip: true }, v: { axis: "z", flip: true } };
+// ...and what the label has to do about it. Nobody could see the strip's
+// orientation while it was a soft gradient; the moment there was type on it,
+// the word came out backwards. Net of the face's two flipped axes and the
+// handedness of a face whose normal points away from the texture, the strip
+// arrives mirrored across its width and the right way up along its length.
+// Measured, not derived: all four combinations were rendered against the real
+// mesh and this is the one that reads.
+const SPINE_LABEL_FACE = { flipU: true, flipV: false };
 
 // ---------------------------------------------------------------------------
 // COVER STIFFNESS — the one place to change it.
@@ -231,19 +245,28 @@ function orientFaceUV(geometry, faceIndex, { u, v }) {
  * edge, as wide as the spine is, so the pixel column at the joint is the same
  * one the cover ends on.
  */
-export function makeSpineStripTexture(coverMap, widthFraction, anisotropy = 1) {
+export function makeSpineStripTexture(coverMap, widthFraction, anisotropy = 1, label = null) {
   const image = coverMap?.image;
   const sourceWidth = image?.width ?? image?.naturalWidth ?? 0;
   const sourceHeight = image?.height ?? image?.naturalHeight ?? 0;
   if (!image || !sourceWidth || !sourceHeight) return null;
 
   const cropWidth = Math.max(1, Math.round(sourceWidth * clamp(widthFraction, 0, 1)));
+  // A spine is a twentieth of the cover's width, so the crop off a 683px
+  // board is only 37px across — enough for the artwork, which is a soft
+  // gradient at that scale, but far too few pixels for type. Where a label is
+  // to be set the strip is widened to a floor and the artwork stretched
+  // across it. Only the width changes: the mesh maps u across the spine
+  // whatever the texel count, so a horizontal stretch is invisible on the
+  // finished book, whereas scaling both axes to keep the crop's aspect would
+  // make this canvas six thousand pixels long for no gain.
   const canvas = document.createElement("canvas");
-  canvas.width = cropWidth;
+  canvas.width = label?.text ? Math.max(cropWidth, SPINE_LABEL_MIN_PX) : cropWidth;
   canvas.height = sourceHeight;
   const context = canvas.getContext("2d");
   if (!context) return null;
-  context.drawImage(image, 0, 0, cropWidth, sourceHeight, 0, 0, cropWidth, sourceHeight);
+  context.drawImage(image, 0, 0, cropWidth, sourceHeight, 0, 0, canvas.width, canvas.height);
+  if (label?.text) drawSpineLabel(context, { width: canvas.width, height: canvas.height }, label);
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -346,6 +369,7 @@ export class CaseBinding extends THREE.Group {
     backMaterial,
     paperMaterial,
     spineAnisotropy = 1,
+    spineLabel = null,
     leafMaterials,
   }) {
     this.#disposeCase();
@@ -364,7 +388,10 @@ export class CaseBinding extends THREE.Group {
     // The spine's bottom-outer edge is the book frame's origin and the line
     // that rests on the table, so the case sits on the table at every angle.
     this.#book.position.set(0, -thickness, 0);
-    this.#buildSpine(frontMaterial, paperMaterial, spineAnisotropy);
+    this.#buildSpine(frontMaterial, paperMaterial, spineAnisotropy, {
+      ...normaliseSpineLabel(spineLabel),
+      ...SPINE_LABEL_FACE,
+    });
     this.#buildCover({
       joint: this.#frontJoint,
       cover: this.#frontCover,
@@ -393,13 +420,14 @@ export class CaseBinding extends THREE.Group {
     this.#apply();
   }
 
-  #buildSpine(coverMaterial, paperMaterial, anisotropy) {
+  #buildSpine(coverMaterial, paperMaterial, anisotropy, label) {
     const { spineWidth, caseHeight, coverThickness, caseWidth } = this.#dimensions;
 
     this.#spineTexture = makeSpineStripTexture(
       coverMaterial?.map ?? null,
       spineWidth / caseWidth,
       anisotropy,
+      label,
     );
     const spineMaterial = new THREE.MeshStandardMaterial({
       color: "#ffffff",
@@ -416,7 +444,7 @@ export class CaseBinding extends THREE.Group {
     // joint to the back joint so the strip meets the front cover on the same
     // pixel column the cover ends on; v puts the artwork's top at the head
     // (-z, which is screen-up under this scene's camera).
-    orientFaceUV(geometry, 1, { u: { axis: "y", flip: true }, v: { axis: "z", flip: true } });
+    orientFaceUV(geometry, 1, SPINE_FACE_UV);
     this.#owned.push(geometry);
 
     this.#spineBoard = new THREE.Mesh(geometry, spineMaterial);

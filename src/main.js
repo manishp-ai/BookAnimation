@@ -1,5 +1,7 @@
 import * as THREE from "three";
 import { books } from "./books.js";
+import { loadEdition } from "./edition.js";
+import { SPINE_LABEL_DEFAULTS } from "./spine-label.js";
 import { CaseBinding } from "./binding.js";
 import {
   chooseDragDirection,
@@ -342,6 +344,24 @@ async function selectBook(book, immediate = false) {
   setLoading(true, readerText.preparing(bookTitle(book)));
   resize();
 
+  // A canvas draws with whatever face is resolved at the moment fillText
+  // runs; it cannot wait for a webfont the way laid-out text does. So the
+  // spine's face has to be in before the strip is painted, or the label
+  // silently falls back to the system mono.
+  await spineFontReady();
+
+  // What is printed on the outside of the book is content, not structure, so
+  // it comes from public/books/<id>/edition.json at run time. Applied before
+  // any texture is requested, so artwork the file names is what gets fetched.
+  const edition = await loadEdition(book, {
+    baseUrl: import.meta.env.BASE_URL,
+    fetchImpl: typeof fetch === "function" ? fetch.bind(globalThis) : undefined,
+    warn: (message) => console.warn(`[edition] ${message}`),
+  });
+  if (token !== loadToken) return;
+  selectedBook = edition;
+  book = edition;
+
   const [leafMaterials, frontMaterial, backMaterial, paperMaterial] = await Promise.all([
     Promise.all(book.pages.map((source) => pageMaterial(book.id, source))),
     pageMaterial(book.id, book.case.front),
@@ -360,6 +380,7 @@ async function selectBook(book, immediate = false) {
     backMaterial,
     paperMaterial,
     spineAnisotropy: Math.min(MAX_TEXTURE_ANISOTROPY, renderer.capabilities.getMaxAnisotropy()),
+    spineLabel: book.spine,
     leafMaterials,
   });
   memoizeSheetDeformation();
@@ -381,6 +402,17 @@ async function selectBook(book, immediate = false) {
   setLoading(false);
   updateStatus();
   requestRender();
+}
+
+// Resolves once the spine face is usable, whether it loaded or not: a missing
+// font must cost the label its typeface, never the book.
+let spineFontPromise = null;
+function spineFontReady() {
+  if (spineFontPromise) return spineFontPromise;
+  const sample = `600 32px ${SPINE_LABEL_DEFAULTS.family}`;
+  spineFontPromise = (document.fonts?.load(sample, "WORLD PASSPORT") ?? Promise.resolve())
+    .catch((error) => console.warn(`[spine] font unavailable, falling back: ${error?.message ?? error}`));
+  return spineFontPromise;
 }
 
 function refreshAllPageNormals() {

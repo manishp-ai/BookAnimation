@@ -38,6 +38,66 @@ generated the template originally.
 Unlike a skill-generated book, `src/books.js` here was written by hand, so
 re-running `compose_pages.py` will overwrite it.
 
+## Updating the cover art and the spine — `edition.json`
+
+What is printed on the *outside* of the book is content, not structure, so it
+lives in a JSON file that is read at run time:
+
+    public/books/world-passport/edition.json
+
+Edit it and reload the page. No rebuild: `public/` is served verbatim by the
+dev server and copied verbatim into `dist/`, so the same file is editable on a
+deployed site. `edition.schema.json` sits beside it, so an editor that honours
+`$schema` will complete and validate the fields as you type.
+
+```json
+{
+  "title": "World Passport",
+  "mark": "W",
+  "case": {
+    "front": "/books/world-passport/page-00.jpg",
+    "back":  "/books/world-passport/page-03.jpg",
+    "paper": "/books/world-passport/page-01.jpg"
+  },
+  "spine": { "text": "World Passport", "size": 0.4, "tracking": 0.32 }
+}
+```
+
+To change the **cover photographs**, drop the images into
+`public/books/world-passport/` and point `case.front` / `case.back` at them.
+The spine is cropped from `case.front`'s binding edge, so the two always match
+and the wrap around the joint stays seamless — change the front artwork and
+the spine follows it.
+
+To change the **spine lettering**, set `spine.text`. Sizes are fractions of
+the spine itself rather than pixels, so the label is the same size on the
+finished book whatever resolution the artwork is:
+
+| Field | What it does |
+| --- | --- |
+| `text` | The words. `""` or omitted leaves the spine as bare artwork. |
+| `size` | Cap height as a fraction of the spine's width. |
+| `tracking` | Space between letters, in ems. A narrow spine needs a lot. |
+| `fill` | How much of the spine's length the words may fill before the type is shrunk to fit. |
+| `direction` | `down` reads top-to-bottom with the book face up (UK/US); `up` reads bottom-to-top (continental). |
+| `offset` | Centre line across the spine's width; `0.5` is centred. |
+| `family`, `weight`, `color`, `opacity`, `uppercase` | Type and ink. Opacity below 1 lets the artwork through, which is how foil and blind stamping read. |
+
+Every field is optional and falls back on its own — a typo costs you that one
+value, never the book. A missing `edition.json` is normal and silent; a
+malformed one warns in the console and the built-in edition from
+`src/books.js` is used instead.
+
+Structural properties — `ratio`, `thickness`, `coverThickness`, `coverStyle`,
+the leaves — are deliberately *not* settable here. Changing those changes the
+model rather than the content, so they stay in `src/books.js`.
+
+The spine is lettered in JetBrains Mono SemiBold, subset to the characters a
+spine needs and self-hosted from `public/fonts/` (SIL OFL 1.1 — see
+`THIRD_PARTY_NOTICES.md`). A passport's machine-readable zone is monospaced
+and the cover artwork is built out of grids and tick marks, so a technical
+mono is the face this object actually wants.
+
 ## Orbit view and spine (`src/orbit.js`)
 
 The ⟲ toggle hands the closed book's rotation to the pointer: horizontal drag

@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Passport Book edition",
+  "description": "Content printed on the outside of one bound edition. Loaded at run time and merged over the built-in edition in src/books.js; every field is optional and anything omitted keeps its built-in value. Structural properties — ratio, thickness, coverThickness, coverStyle, the leaves — are deliberately not settable here, because changing them changes the model rather than the content.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "$comment": { "type": "string" },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The edition's name, used in the reader's status line and library."
+    },
+    "mark": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Single-character mark shown on the library button."
+    },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Artwork for the case. Paths are resolved against the site root; absolute http(s) and data: URLs are used as supplied.",
+      "properties": {
+        "front": { "type": "string", "minLength": 1, "description": "Front board artwork. The spine strip is cropped from its binding edge, so this is also what the spine is made of." },
+        "back": { "type": "string", "minLength": 1, "description": "Back board artwork." },
+        "paper": { "type": "string", "minLength": 1, "description": "Endpaper/pastedown stock, also used for the spine liner." }
+      }
+    },
+    "spine": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The book's name down its spine. Sizes are fractions of the spine itself, not pixels, so the label is the same size on the finished book whatever resolution the artwork is. Omit `text` or set it to \"\" and the spine renders as bare artwork.",
+      "properties": {
+        "text": { "type": "string", "description": "The words. Empty means no label." },
+        "family": { "type": "string", "description": "CSS font-family list. A system stack avoids a webfont download for one short string." },
+        "weight": {
+          "description": "CSS font weight: 100-900, or a keyword such as \"bold\".",
+          "anyOf": [{ "type": "number", "minimum": 100, "maximum": 900 }, { "type": "string", "minLength": 1 }]
+        },
+        "color": { "type": "string", "minLength": 1, "description": "Any CSS colour." },
+        "opacity": { "type": "number", "minimum": 0, "maximum": 1, "description": "Below 1 lets the artwork show through, which is how foil and blind stamping read." },
+        "size": { "type": "number", "minimum": 0.05, "maximum": 0.95, "description": "Cap height as a fraction of the spine's width." },
+        "tracking": { "type": "number", "minimum": 0, "maximum": 2, "description": "Extra space between letters, in ems. A narrow spine needs generous tracking to stay readable." },
+        "fill": { "type": "number", "minimum": 0.1, "maximum": 1, "description": "How much of the spine's length the words may fill before the type is shrunk to fit." },
+        "direction": { "enum": ["down", "up"], "description": "\"down\" reads top-to-bottom with the book face up (UK/US practice); \"up\" reads bottom-to-top (continental)." },
+        "offset": { "type": "number", "minimum": 0, "maximum": 1, "description": "Centre line across the spine's width. 0.5 is centred." },
+        "uppercase": { "type": "boolean", "description": "Set the text in caps. True by default, which is how most spines are lettered." }
+      }
+    }
+  }
+}

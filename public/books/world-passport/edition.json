@@ -1,0 +1,24 @@
+{
+  "$schema": "./edition.schema.json",
+  "$comment": "Content on the outside of the book. Edit and reload \u2014 no rebuild. Structure (proportions, calliper, leaf count) lives in src/books.js. See README.md.",
+  "title": "World Passport",
+  "mark": "W",
+  "case": {
+    "front": "/books/world-passport/page-00.jpg",
+    "back": "/books/world-passport/page-03.jpg",
+    "paper": "/books/world-passport/page-01.jpg"
+  },
+  "spine": {
+    "text": "World Passport",
+    "family": "\"JetBrains Mono\", ui-monospace, \"DejaVu Sans Mono\", monospace",
+    "weight": 600,
+    "color": "#eef1f7",
+    "opacity": 0.92,
+    "size": 0.4,
+    "tracking": 0.32,
+    "fill": 0.6,
+    "direction": "down",
+    "offset": 0.5,
+    "uppercase": true
+  }
+}

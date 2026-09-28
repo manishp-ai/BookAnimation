@@ -1,3 +1,15 @@
+/* JetBrains Mono, subset to the characters a spine needs (SIL OFL 1.1 —
+   the licence ships beside it at public/fonts/JetBrainsMono-OFL.txt).
+   Self-hosted: the spine label is drawn into a canvas, and a canvas cannot
+   wait for a font it does not know about. */
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/JetBrainsMono-SemiBold-subset.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: block;
+}
+
 :root {
   color: #111;
   font-family: Arial, sans-serif;

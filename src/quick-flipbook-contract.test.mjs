@@ -194,6 +194,40 @@ test("the book is built as a case binding, with the spine as its anchor", () => 
   assert.match(binding, /this\.#progress = clamp\(value, 0, this\.steps\)/);
 });
 
+// The book's name down its spine, and the run-time JSON that sets it.
+test("the outside of the book is content, loaded from JSON at run time", () => {
+  assert.match(main, /import \{ loadEdition \} from "\.\/edition\.js"/);
+  // Applied before any texture request, so artwork the file names is what
+  // actually gets fetched rather than the built-in artwork being loaded first.
+  assert.ok(
+    main.indexOf("await loadEdition(book") < main.indexOf("pageMaterial(book.id, book.case.front)"),
+    "the edition patch must be applied before the case artwork is requested",
+  );
+  assert.match(main, /spineLabel: book\.spine/);
+  assert.match(binding, /this\.#buildSpine\(frontMaterial, paperMaterial, spineAnisotropy, \{/);
+  // A canvas cannot wait for a webfont the way laid-out text can, so the face
+  // has to be resolved before the strip is painted.
+  assert.match(main, /await spineFontReady\(\)/);
+  assert.ok(
+    main.indexOf("await spineFontReady()") < main.indexOf("binding.setEdition({"),
+    "the spine face must be loaded before the strip is drawn",
+  );
+  assert.match(styles, /@font-face/);
+  assert.match(styles, /JetBrainsMono-SemiBold-subset\.woff2/);
+});
+
+test("the spine label is drawn to suit the face it lands on", () => {
+  // Measured against the real mesh: the outward face presents the strip
+  // mirrored across its width. Getting this wrong prints the title backwards.
+  assert.match(binding, /const SPINE_LABEL_FACE = \{ flipU: true, flipV: false \}/);
+  assert.match(binding, /\.\.\.SPINE_LABEL_FACE,/);
+  // Widen the strip for type, but never scale its length: the mesh maps u
+  // across the spine whatever the texel count, and keeping the crop's aspect
+  // would make the canvas thousands of pixels long for nothing.
+  assert.match(binding, /canvas\.width = label\?\.text \? Math\.max\(cropWidth, SPINE_LABEL_MIN_PX\) : cropWidth/);
+  assert.match(binding, /canvas\.height = sourceHeight/);
+});
+
 test("cover stiffness is one switch and nothing else", () => {
   assert.match(binding, /export const COVER_STYLES = \["soft", "rigid"\]/);
   assert.match(binding, /this\.#coverStyle === "soft"/);

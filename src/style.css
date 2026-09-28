@@ -1,11 +1,11 @@
-/* JetBrains Mono, subset to the characters a spine needs (SIL OFL 1.1 —
-   the licence ships beside it at public/fonts/JetBrainsMono-OFL.txt).
+/* DejaVu Sans Bold, subset to the characters a spine needs (Bitstream Vera
+   licence — the notice ships beside it at public/fonts/DejaVuSans-LICENSE.txt).
    Self-hosted: the spine label is drawn into a canvas, and a canvas cannot
    wait for a font it does not know about. */
 @font-face {
-  font-family: "JetBrains Mono";
-  src: url("/fonts/JetBrainsMono-SemiBold-subset.woff2") format("woff2");
-  font-weight: 600;
+  font-family: "DejaVu Sans";
+  src: url("/fonts/DejaVuSans-Bold-subset.woff2") format("woff2");
+  font-weight: 700;
   font-style: normal;
   font-display: block;
 }

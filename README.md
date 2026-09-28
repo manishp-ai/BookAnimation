@@ -81,7 +81,8 @@ finished book whatever resolution the artwork is:
 | `fill` | How much of the spine's length the words may fill before the type is shrunk to fit. |
 | `direction` | `down` reads top-to-bottom with the book face up (UK/US); `up` reads bottom-to-top (continental). |
 | `offset` | Centre line across the spine's width; `0.5` is centred. |
-| `family`, `weight`, `color`, `opacity`, `uppercase` | Type and ink. Opacity below 1 lets the artwork through, which is how foil and blind stamping read. |
+| `family`, `weight`, `color`, `opacity`, `uppercase` | Type and ink. Opacity below 1 lets the artwork through, which is how blind stamping reads. |
+| `halo`, `haloColor` | Spread of the soft dark edge behind each letter, in ems. The artwork under the label runs near-black to near-white, so type of any one colour loses contrast somewhere along the word; the halo gives every letter its own background. `0` turns it off. |
 
 Every field is optional and falls back on its own — a typo costs you that one
 value, never the book. A missing `edition.json` is normal and silent; a
@@ -92,11 +93,11 @@ Structural properties — `ratio`, `thickness`, `coverThickness`, `coverStyle`,
 the leaves — are deliberately *not* settable here. Changing those changes the
 model rather than the content, so they stay in `src/books.js`.
 
-The spine is lettered in JetBrains Mono SemiBold, subset to the characters a
-spine needs and self-hosted from `public/fonts/` (SIL OFL 1.1 — see
-`THIRD_PARTY_NOTICES.md`). A passport's machine-readable zone is monospaced
-and the cover artwork is built out of grids and tick marks, so a technical
-mono is the face this object actually wants.
+The spine is lettered in DejaVu Sans Bold, subset to the characters a spine
+needs and self-hosted from `public/fonts/` (Bitstream Vera licence — see
+`THIRD_PARTY_NOTICES.md`). A spine is read small, at an angle, over whatever
+the cover artwork is doing underneath, which wants a face with a large
+x-height and open apertures — not a display face and not a coding mono.
 
 ## Orbit view and spine (`src/orbit.js`)
 

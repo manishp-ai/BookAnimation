@@ -12,18 +12,19 @@
 
 export const SPINE_LABEL_DEFAULTS = {
   text: "",
-  // A passport's machine-readable zone is monospaced, and the cover artwork
-  // is built out of grids and tick marks, so a technical mono is the face
-  // this object actually wants. JetBrains Mono, subset to the characters a
-  // spine needs and self-hosted (OFL 1.1 — see public/fonts/).
-  family: '"JetBrains Mono", ui-monospace, "DejaVu Sans Mono", monospace',
-  weight: 600,
-  color: "#f4f6fa",
-  opacity: 0.94,
+  // A spine is read small, at an angle, over whatever the cover artwork is
+  // doing underneath. That wants a face with a large x-height and open
+  // apertures, not a display face and not a coding mono: DejaVu Sans Bold,
+  // subset and self-hosted (Bitstream Vera licence — see public/fonts/).
+  family: '"DejaVu Sans", "Helvetica Neue", Helvetica, Arial, sans-serif',
+  weight: 700,
+  color: "#ffffff",
+  opacity: 1,
   // Cap height as a fraction of the spine's width.
-  size: 0.42,
-  // Extra space between letters, in ems.
-  tracking: 0.3,
+  size: 0.52,
+  // Extra space between letters, in ems. Some tracking helps caps; too much
+  // stops the eye reading a word and starts it reading letters.
+  tracking: 0.16,
   // How much of the spine's length the word may fill before it is shrunk.
   fill: 0.62,
   // "down" reads top-to-bottom with the book face up, which is UK and US
@@ -33,6 +34,14 @@ export const SPINE_LABEL_DEFAULTS = {
   // fraction of the spine's width. 0.5 is dead centre.
   offset: 0.5,
   uppercase: true,
+  // Lettering on a book is stamped, not printed flat, and a stamp always has
+  // an edge. Here that edge is doing real work: the artwork under the label
+  // is a cloudscape that runs from near-black to near-white, so type of any
+  // one colour loses its contrast somewhere along the word. A soft dark halo
+  // gives every letter its own background. `halo` is the spread in ems, 0
+  // turns it off.
+  halo: 0.16,
+  haloColor: "rgba(6, 10, 18, 0.85)",
   // The spine board's outward face flips both UV axes, so a texture drawn the
   // natural way up arrives on the mesh rotated a half turn — which is why the
   // label read backwards before this existed. The strip tells the label which
@@ -75,6 +84,8 @@ export function normaliseSpineLabel(raw) {
     direction: DIRECTIONS.includes(raw.direction) ? raw.direction : SPINE_LABEL_DEFAULTS.direction,
     offset: number(raw.offset, SPINE_LABEL_DEFAULTS.offset, 0, 1),
     uppercase: raw.uppercase === undefined ? SPINE_LABEL_DEFAULTS.uppercase : raw.uppercase !== false,
+    halo: number(raw.halo, SPINE_LABEL_DEFAULTS.halo, 0, 1),
+    haloColor: text(raw.haloColor, SPINE_LABEL_DEFAULTS.haloColor),
     flipU: raw.flipU === true,
     flipV: raw.flipV === true,
   };
@@ -155,6 +166,25 @@ export function drawSpineLabel(context, strip, label) {
   // along the spine in the reading direction.
   context.translate(strip.width * label.offset, strip.height / 2);
   context.rotate(label.direction === "down" ? Math.PI / 2 : -Math.PI / 2);
+
+  // Halo first, as a pass under the whole word: drawn per glyph it would show
+  // where one letter's halo crosses its neighbour's stem.
+  if (label.halo > 0) {
+    context.save();
+    context.shadowColor = label.haloColor;
+    context.shadowBlur = fontPx * label.halo;
+    context.fillStyle = label.haloColor;
+    // Three passes because canvas shadows are faint over busy artwork, and a
+    // stacked blur is still cheaper and softer than stroking the glyphs.
+    for (let pass = 0; pass < 3; pass += 1) {
+      let cursor = -length / 2;
+      for (const character of characters) {
+        context.fillText(character, cursor, 0);
+        cursor += context.measureText(character).width + fontPx * label.tracking;
+      }
+    }
+    context.restore();
+  }
 
   let cursor = -length / 2;
   for (const character of characters) {

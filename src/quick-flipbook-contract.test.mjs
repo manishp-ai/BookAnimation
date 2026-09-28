@@ -8,6 +8,7 @@ const books = await readFile(new URL("./books.js", import.meta.url), "utf8");
 const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
 const styles = await readFile(new URL("./style.css", import.meta.url), "utf8");
 const config = await readFile(new URL("../vite.config.js", import.meta.url), "utf8");
+const bindingLabel = await readFile(new URL("./spine-label.js", import.meta.url), "utf8");
 
 // The Quick FlipBook lifecycle still drives every page turn; the case binding
 // owns the engine now, so the calls live in binding.js and main.js talks to
@@ -213,7 +214,19 @@ test("the outside of the book is content, loaded from JSON at run time", () => {
     "the spine face must be loaded before the strip is drawn",
   );
   assert.match(styles, /@font-face/);
-  assert.match(styles, /JetBrainsMono-SemiBold-subset\.woff2/);
+  assert.match(styles, /DejaVuSans-Bold-subset\.woff2/);
+});
+
+test("the spine label is legible over whatever the artwork is doing", () => {
+  // The artwork under the label runs near-black to near-white, so type of any
+  // one colour loses contrast somewhere along the word. The halo gives every
+  // letter its own background; drawn as one pass under the whole word, since
+  // per glyph it shows where one letter's halo crosses its neighbour's stem.
+  assert.match(bindingLabel, /if \(label\.halo > 0\) \{/);
+  assert.match(bindingLabel, /context\.shadowBlur = fontPx \* label\.halo/);
+  assert.doesNotMatch(bindingLabel, /ui-monospace/, "a coding mono is not a spine face");
+  assert.match(bindingLabel, /family: '"DejaVu Sans"/);
+  assert.match(bindingLabel, /weight: 700/);
 });
 
 test("the spine label is drawn to suit the face it lands on", () => {

@@ -8,8 +8,9 @@ Quick FlipBook depends on Three.js and `three.modifiers`; their license files ar
 included with the installed packages.
 
 The book's name is lettered down its spine in
-[JetBrains Mono](https://github.com/JetBrains/JetBrainsMono) SemiBold,
-copyright 2020 The JetBrains Mono Project Authors, under the SIL Open Font
-License 1.1. The face is subset to the characters a spine needs and served
-from `public/fonts/`; the licence ships beside it as
-`public/fonts/JetBrainsMono-OFL.txt`, as the OFL requires.
+[DejaVu Sans](https://dejavu-fonts.github.io/) Bold. The DejaVu changes are in
+the public domain; the underlying Bitstream Vera fonts are copyright 2003
+Bitstream, Inc., and glyphs imported from the Arev fonts are copyright
+Tavmjong Bah. All three notices are reproduced in full in
+`public/fonts/DejaVuSans-LICENSE.txt`, which ships beside the font as that
+licence requires. The face is subset to the characters a spine needs.

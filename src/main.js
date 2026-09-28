@@ -409,7 +409,7 @@ async function selectBook(book, immediate = false) {
 let spineFontPromise = null;
 function spineFontReady() {
   if (spineFontPromise) return spineFontPromise;
-  const sample = `600 32px ${SPINE_LABEL_DEFAULTS.family}`;
+  const sample = `${SPINE_LABEL_DEFAULTS.weight} 32px ${SPINE_LABEL_DEFAULTS.family}`;
   spineFontPromise = (document.fonts?.load(sample, "WORLD PASSPORT") ?? Promise.resolve())
     .catch((error) => console.warn(`[spine] font unavailable, falling back: ${error?.message ?? error}`));
   return spineFontPromise;

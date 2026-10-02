@@ -58,38 +58,17 @@ Blocked on:
   `0f47067` regression.
 
 Danger:
-- Temporary tooling still in the tree (`tools/inspect.*`, `_shots/`,
-  `_spine-shot.html`, the `shotSink` middleware in `vite.config.js`, the
-  `reference-flipbook` launch entry). Listed in `TODO.md`; must come out
-  before merge.
 - `requestAnimationFrame` never fires in this preview sandbox
   (`document.visibilityState` is permanently `hidden`). The gesture decisions
   were verified because they land as direct property writes; the orbit spring
   changes are covered by unit test only, not by watching the book move.
 
 Resume by:
-- Either answering the blocked question above (which moment shows the pale
-  band), or starting the tooling cleanup pass in `TODO.md` before merge.
+- Answering the blocked question above — which moment shows the pale band.
+  Everything else for this branch is done and committed.
 
-<!-- machine-record: written by session-state hook, do not edit -->
-## Machine record — 2026-10-02 14:26:23
-
-Session ended here. Facts at that moment, recorded by hook:
-
-- Branch: `fix/passport-spine-hinge`  HEAD: `3e68dbf`
-- Uncommitted files: 93
-```
-  M CHANGELOG.md
-   M README.md
-   D _shots/ab-fill-15.png
-   D _shots/ab-fill-under45.png
-   D _shots/ab-graze-00.png
-   D _shots/ab-graze-15.png
-   D _shots/ab-graze-under45.png
-   D _shots/ab-nofill-15.png
-   D _shots/ab-nofill-under45.png
-   M _shots/after-cover-open.png
-  ... and 83 more
-```
-
-If the narrative above disagrees with this, trust this block and the tree.
+Note: the scene harness (`tools/`, `_shots/`, the shot-sink middleware, the
+`__BINDING_HARNESS__` seam) was removed in the final commit, so there is no
+longer a way to drive the live scene from the console. Reconstructable from
+the 2026-10-01 and 2026-10-02 CHANGELOG entries if deeper geometry work
+needs it.

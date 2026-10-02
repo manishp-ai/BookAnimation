@@ -1,5 +1,72 @@
 # Changelog
 
+## 2026-10-02 — Temporary tooling removed before merge
+
+Role: Release Engineer
+
+Status: Removed, Verified
+
+Reason:
+The case-binding rebuild and the fixes on top of it were built with a scene
+harness that was never meant to ship: a page that exposed the live scene on
+`globalThis.__binding`, offscreen render-target capture, a dev-only
+middleware that wrote the PNGs to disk, and a structural-invariant checker.
+All of it was tracked in `TODO.md` for removal before merge. It is out.
+
+Removed:
+- `tools/` entirely — `inspect.html`, `inspect.mjs`, `invariants.mjs`, and
+  `shots.html`/`shots.mjs`, an older duplicate pair of the same harness that
+  the TODO had not listed.
+- `_spine-shot.html`.
+- `_shots/` (216 captures) from disk; it was untracked in `42b82ee`, so the
+  now-pointless `_shots/` line comes back out of `.gitignore` with it.
+- The `shotSink` middleware and its `node:fs`/`node:path` imports from
+  `vite.config.js`, leaving the config to `publicDir`, the chunk-size limit
+  and the dev server's host/port.
+- The `__BINDING_HARNESS__` block at the foot of `src/main.js` — its only
+  consumers were the harness pages. Its comment pointed at
+  `tools/invariants.html`, a file that never existed.
+- The `reference-flipbook` entry in `.claude/launch.json`, which started a
+  dev server from an unrelated directory outside this repo.
+- `public/books/world-passport/spine.jpg`, orphaned. Verified unreferenced
+  first: `edition.json`'s `spine` key is the lettering config, not an image
+  path, and the spine strip is cropped from the front artwork. Loading the
+  app afterwards requests no such file. `page-02.jpg` was checked at the same
+  time and kept — `src/books.js` alternates it with `page-01.jpg` for the
+  leaf materials.
+
+Changes:
+- `src/quick-flipbook-contract.test.mjs`: the square test's comment cited the
+  offscreen detector by file path. Reworded to describe the method and point
+  at the CHANGELOG, so deleting the harness does not leave the test
+  explaining itself by reference to a file that is gone.
+- `TODO.md`: the whole "Before merge" section is closed and removed. Added
+  the unreproduced pale band from Boss's report, and a note on what the
+  harness did in case deeper geometry work ever wants it back — it was
+  deleted because none of it ships, not because it was wrong.
+
+Verification:
+- `npm test` 85/85, `npm run build` clean. No test depended on any of this:
+  the only assertion against `vite.config.js` is `publicDir: "public"`.
+- Grepped the whole tree for every removed name — `tools/`,
+  `__BINDING_HARNESS__`, `__binding`, `shotSink`, `_spine-shot`, `spine.jpg`,
+  `reference-flipbook`, `_shots` — across js/mjs/json/html/css and in the
+  docs. Nothing dangling outside the dated CHANGELOG entries, which are a
+  record of what happened and correctly describe a past state.
+- App loaded on the dev server: no console errors, every request 200, no 404
+  for the deleted asset, all four page images and the subset font present.
+- Production bundle contains zero occurrences of `BINDING_HARNESS`, `__shot`
+  or `shot-sink`.
+
+Result:
+Nothing but product in the tree. The repo root is down to source, public
+assets, config, licences and the four Markdown records.
+
+Known Issues:
+- The 216 capture blobs remain in git history from before `42b82ee`
+  untracked them. Purging those needs a history rewrite, which is not worth
+  doing for this.
+
 ## 2026-10-01 — The case gets a square, so pages stop showing through the cover
 
 Role: Frontend Engineer (Three.js) + QA Engineer

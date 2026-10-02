@@ -293,12 +293,13 @@ test("the hit-test hull is meshes, not the groups the covers are", () => {
   assert.match(binding, /this\.#spineBoard = null;\s*\n\s*this\.#hull = null;/);
 });
 
-// Measured from the cover side with the offscreen detector in tools/inspect.mjs
-// (render the covers alone, then the whole book, count cover pixels a page
-// replaced): flush-cut leaves broke 1310 pixels across 13 of 132 sampled
-// poses; with the square it is 241 across 5, and what is left is a sliver of
-// fore edge in a not-yet-shut case at the tilt limit. The square is the whole
-// difference, so it is the thing to keep honest here.
+// Measured before the inspection harness was removed, with an offscreen
+// detector that rendered the covers alone and then the whole book from the
+// cover side and counted cover pixels a page had replaced: flush-cut leaves
+// broke 1310 pixels across 13 of 132 sampled poses; with the square it was 241
+// across 5, the remainder a sliver of fore edge in a not-yet-shut case at the
+// tilt limit. The square is the whole difference, so it is what to keep honest
+// here. (See the 2026-10-01 CHANGELOG entry for the method.)
 test("the text block is trimmed inside the boards on every free edge", () => {
   assert.match(binding, /const \{ leafWidth, leafHeight \} = dimensions/);
   assert.match(geometry, /leafWidth: boardWidth - safeSquare/);

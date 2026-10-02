@@ -394,26 +394,3 @@ function resize() {
 window.addEventListener("resize", resize);
 resize();
 selectBook(books[0], true);
-
-// Test seam, not debug scaffolding: tools/invariants.html asserts the binding's
-// construction against the live scene (hinge edges, a motionless spine, sheet
-// anchors, raycast occlusion), which needs the real objects and a real GPU.
-// Inert unless a harness page sets the flag before this module runs; nothing in
-// the app or the production build ever does.
-if (globalThis.__BINDING_HARNESS__) {
-  globalThis.__binding = {
-    scene,
-    camera,
-    renderer,
-    book: binding,
-    bookRig,
-    get spine() { return binding.spineBoard; },
-    get sheetCount() { return binding.leafCount; },
-    get maxProgress() { return binding.steps; },
-    setProgress(value) {
-      binding.progress = value;
-      scene.updateMatrixWorld(true);
-      renderer.render(scene, camera);
-    },
-  };
-}

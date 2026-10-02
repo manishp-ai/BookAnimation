@@ -5,6 +5,7 @@ import {
   OrbitSpring,
   clamp,
   facing,
+  groundShadowStrength,
   nextOrbitTarget,
   normalizeTurns,
   reseatHalfTurn,
@@ -122,6 +123,49 @@ test("set() snaps the spring immediately with no residual velocity", () => {
   assert.equal(spring.value, 2);
   assert.equal(spring.target, 2);
   assert.equal(spring.velocity, 0);
+});
+
+// The table is a fixed plane, so its shadow is only honest while the book is
+// lying on it. Turning the book over takes it off the table and sets it back
+// down the other way up, and the shadow has to go with it — otherwise the key
+// light's slab lands clear of the book and reads as a pale band beside it.
+test("the ground shadow belongs to the book only while it lies flat", () => {
+  assert.equal(groundShadowStrength(0), 1, "square on, lying on the table");
+  assert.ok(Math.abs(groundShadowStrength(Math.PI) - 1) < 1e-9, "turned over, lying on it again");
+  assert.ok(Math.abs(groundShadowStrength(-Math.PI) - 1) < 1e-9, "turned over the other way");
+  assert.ok(groundShadowStrength(Math.PI / 2) < 1e-9, "edge-on, the book is in the air");
+  assert.ok(groundShadowStrength(-Math.PI / 2) < 1e-9, "edge-on the other way");
+});
+
+test("the ground shadow fades and returns without a step in it", () => {
+  // Monotone out to edge-on: no pose on the way up is darker than one flatter
+  // than it, which is what would read as the shadow pumping during a drag.
+  let previous = groundShadowStrength(0);
+  for (let spin = 0.02; spin <= Math.PI / 2; spin += 0.02) {
+    const strength = groundShadowStrength(spin);
+    assert.ok(strength <= previous + 1e-12, `strength rose at ${spin.toFixed(2)}`);
+    previous = strength;
+  }
+  // Flat at rest, so nudging a settled book does not snap the shadow off: the
+  // curve leaves rest with no slope, which shows up as halving the nudge
+  // cutting the loss by about four rather than by two.
+  const nudge = 1 - groundShadowStrength(0.05);
+  const half = 1 - groundShadowStrength(0.025);
+  assert.ok(nudge < 0.01, `a 3-degree nudge costs ${nudge.toFixed(4)} of the shadow`);
+  assert.ok(Math.abs(nudge / half - 4) < 0.1, "leaves rest flat, not at an angle");
+  // Symmetric and periodic: which way the book was turned cannot matter.
+  for (const spin of [0.4, 1.1, 2.3, 3.9]) {
+    assert.ok(Math.abs(groundShadowStrength(spin) - groundShadowStrength(-spin)) < 1e-12);
+    assert.ok(Math.abs(groundShadowStrength(spin) - groundShadowStrength(spin + 2 * Math.PI)) < 1e-9);
+  }
+});
+
+test("the ground shadow is gone by the pose that showed the band worst", () => {
+  // A third of a turn over is where the slab measured largest on the shipped
+  // lighting — 17277 background pixels against 716 lying flat. Whatever curve
+  // this function uses has to have given up by there.
+  assert.ok(groundShadowStrength(1.2) < 0.005, "a third of a turn over");
+  assert.ok(groundShadowStrength(Math.PI - 1.2) < 0.005, "and coming back down");
 });
 
 test("returning to flat takes the short way, not a multi-turn wind-back", () => {

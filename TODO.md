@@ -14,17 +14,12 @@ Open items with enough detail to act on without rediscovering them.
 ## Carried over
 
 - Mobile (max-width 620px) and reduced-motion passes on the closing step.
-- A real-browser pass on rotation feel, and on turning a shut book over to
-  re-seat it (added 2026-10-02; covered by a node harness that drives the real
-  controller, but never seen on screen). The preview sandbox used in these
-  sessions never fires `requestAnimationFrame` (`document.visibilityState` is
-  permanently `hidden`), so anything that only reaches the screen through the
-  render loop cannot be verified there.
-- The pale band down the right of the book in Boss's 2026-10-02 report was
-  never reproduced. The missing square was a real defect and fixing it
-  measurably helped, but an A/B of that exact view looked the same before and
-  after. Need to know which moment shows it before changing anything — a blind
-  fix in this area is what caused the `0f47067` regression.
+- A real-browser pass on rotation *feel*, and on turning a shut book over to
+  re-seat it. Both are covered by a node harness that drives the real
+  controller; the re-seat has still not been watched happen on screen.
+  `requestAnimationFrame` does now fire in the preview sandbox — it did not in
+  the 2026-10-01/02 sessions — so this is finally checkable by driving the app
+  with pointer events, as the ground-shadow fix was.
 - Reinstating a scene harness, if deeper geometry work is ever needed again.
   The one removed here exposed the live scene on `globalThis.__binding` behind
   a `__BINDING_HARNESS__` flag, with offscreen render-target capture posting
@@ -33,5 +28,14 @@ Open items with enough detail to act on without rediscovering them.
   because it was wrong.
 - Whether the soft covers want the same out-of-plane unit fix the leaves got.
   They cannot overhang anything, so it is cosmetic and was left alone.
+- The ground shadow still shows a little between roughly a tenth and a third
+  of a turn, where it is fading faster than the slab is growing but has not
+  caught up. Bounded by what the book casts lying still, so it is within the
+  rule, but a shadow that stayed attached to the book instead of fading would
+  be better. The way to get it is a dedicated near-overhead caster for the
+  table only — measured sound (it leaves the book pixel-identical) and blocked
+  only by `Object3D.layers` not filtering shadow *receiving* in three r0.185.
+  A custom material sampling one light's shadow map would do it. See the
+  2026-10-02 CHANGELOG entry for the measurements.
 - CHANGELOG entry for the case-binding rebuild itself, as opposed to the fixes
   layered on top of it.

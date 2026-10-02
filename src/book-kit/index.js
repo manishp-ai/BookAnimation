@@ -22,6 +22,7 @@ export {
   OrbitSpring,
   clamp,
   facing,
+  groundShadowStrength,
   nextOrbitTarget,
   normalizeTurns,
   reseatHalfTurn,

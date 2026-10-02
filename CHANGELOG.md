@@ -1,5 +1,93 @@
 # Changelog
 
+## 2026-10-02 — The pale band beside a rotated book was the table's shadow
+
+Role: Frontend Engineer (Three.js) + QA Engineer
+
+Status: Fixed, Verified
+
+Reason:
+Boss reported a wide pale band down the side of the book, and on being asked
+which moment showed it, answered: rotating the open book. Reproduced, and it
+is not geometry. The band is the key light's cast shadow landing on the
+table.
+
+Two earlier sessions looked for this in the binding and found nothing,
+correctly: there are no leaf vertices outside a cover board and no crossings
+between the two cover skins across 185 poses, and the square added on
+2026-10-01 was a real defect fixed but not this one. The reason it was never
+found is that it is not in the book at all. An A/B that changed one thing —
+hiding the table — removed the band and left the book pixel-identical.
+
+The table is a plane fixed in the world at y = -0.035, and the book rotates
+about the origin above it. Lying flat the book's shadow falls underneath
+itself and only a rim of it shows: 716 background pixels for an open book.
+Spun up on edge the book is no longer on the table at all, and the key light
+at (-2.8, 5.2, 2.7) throws its silhouette clear of it, where ShadowMaterial
+draws a flat hard-edged 28% grey quadrilateral on a white page — 17277 pixels
+at a third of a turn, a 24x growth. That slab is the band.
+
+Rejected, with the measurements that rejected them:
+- Moving the key nearer overhead. The slab's area is very nearly linear in
+  the light's horizontal/vertical ratio (0.748 -> 16705px, 0.405 -> 9229,
+  0.242 -> 5684, 0.141 -> 3448), so even a move far enough to visibly change
+  the art direction still leaves ~5x the resting shadow.
+- Giving the table its own near-overhead caster and keeping the key for the
+  book's self-shadowing, separated by `Object3D.layers`. Light layers do not
+  filter shadow *receiving*: measured identical (slightly worse, both lights
+  summing). A zero-intensity caster does leave the book pixel-identical
+  (0 pixels changed), so the idea is sound and only the masking is missing.
+- A contact-shadow pass. The camera is already orthographic straight down, so
+  a shadow projected straight down is exactly the book's own silhouette and
+  invisible. The offset is what sells the table; it cannot be removed.
+
+Changes:
+- `src/book-kit/orbit.js`: `groundShadowStrength(spin)` — how much of the
+  ground shadow the attitude has earned, 1 lying flat down to 0 edge-on, for
+  the consumer to scale its own opacity by. Keyed to the spin and never the
+  tilt, because they are different gestures: tilting is the reader leaning
+  over a book still on the table, which still owns its shadow, while spinning
+  is the book picked up, turned over, and set back down the other way up.
+  Cosine gives that shape for free — full either way up, nothing in between —
+  and is smooth at rest, so nudging a settled book cannot snap the shadow off.
+- `src/main.js`: `updateGroundShadow()` on the controller's `onBeforeRender`,
+  which runs after the rig's rotation is written for the frame. Scales
+  `TABLE_SHADOW_OPACITY` (0.28, previously an inline literal) and skips the
+  draw once the result is below a colour step.
+- `src/book-kit/index.js`: `groundShadowStrength` exported with the rest of
+  the orbit maths.
+
+The sixth power is the cheapest curve meeting the rule that the shadow may
+never put more ink on the table than the book does lying still.
+
+Removed/Reverted:
+- None. No geometry, lighting, or material was touched; the book renders
+  pixel-for-pixel as before in every pose.
+
+Verification:
+- `npm test` 99/99 (3 new in `orbit.test.mjs`, 5 new contract assertions in
+  `quick-flipbook-contract.test.mjs`), `npm run build` clean.
+- Mutation-checked: making the function return 1 fails 3 of the new tests;
+  dropping the exponent to 2 fails the one tied to the measurement. Neither
+  is vacuous.
+- Measured in a browser harness built on the app's exact lighting, camera,
+  table and materials, importing the shipped `groundShadowStrength` rather
+  than a copy, over 66 poses (tilt 0/0.3/0.62 x a full turn in 0.3 steps).
+  Worst cast shadow falls from 13990 ink (17277px, tilt 0.62 spin 1.2 — a
+  detached slab) to 8857 (tilt 0.62 spin 3.3 — the book lying flat the other
+  way up, where a shadow belongs). The shut book at rest is untouched:
+  716px / 413 ink both before and after.
+- Driven live through the real app with pointer and keyboard events — RAF now
+  fires in this preview sandbox, which it did not in the two prior sessions.
+  Opened to a spread and spun to edge-on and to a partial turn: no band, and
+  the resting contact shadow still reads under the shut book.
+
+Known Issues:
+- Between about a tenth and a third of a turn the shadow is fading while the
+  slab is still growing, so a little of it is still visible there. It is
+  bounded by the resting shadow and was judged better than a harder cut-off,
+  which would read as the shadow snapping off mid-drag.
+
 ## 2026-10-02 — A shut book turned over opens from the cover now on top
 
 Role: Frontend Engineer (Three.js) + QA Engineer

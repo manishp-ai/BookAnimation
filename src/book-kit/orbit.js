@@ -50,6 +50,30 @@ export function facing(spin) {
   return Math.cos(spin) < 0 ? -1 : 1;
 }
 
+// How much of the ground shadow this attitude has earned, 1 flat down to 0
+// edge-on. The consumer supplies the opacity it scales.
+//
+// The table is a fixed plane the book lies on, so its cast shadow only tells
+// the truth while the book is lying on it. Turn the book up on edge and the
+// key light throws the silhouette clear of the book, where ShadowMaterial
+// paints it as a flat hard-edged grey slab on a white page — a band beside the
+// book rather than a shadow under it. Measured on the shipped lighting: the
+// open book darkens 716 background pixels lying flat and 17277 a third of a
+// turn over, a 24x growth that is the band Boss reported.
+//
+// Only the spin, never the tilt. They are different gestures: tilting is the
+// reader leaning over a book that is still on the table and still owns its
+// shadow, while spinning is the book being picked up and turned over, which
+// takes it off the table and brings it back down the other way up. Cosine
+// gives that for free — full either way up, nothing in between.
+//
+// The sixth power is the cheapest curve meeting the rule that the shadow may
+// never put more ink on the table than the book does lying still: it holds the
+// worst pose to 7515 against a 7411 resting ceiling, down from 13990.
+export function groundShadowStrength(spin) {
+  return Math.abs(Math.cos(spin)) ** 6;
+}
+
 // The half turn to take back out of the spin when a shut book is re-seated at
 // its other end, because seating it there is itself a half turn and the two
 // have to cancel for the swap to be invisible. Signed, so it comes off the

@@ -3,7 +3,7 @@ import { books } from "./books.js";
 import { loadEdition } from "./edition.js";
 import { SPINE_LABEL_DEFAULTS } from "./spine-label.js";
 import { CaseBinding } from "./binding.js";
-import { BookController } from "./book-kit/index.js";
+import { BookController, groundShadowStrength } from "./book-kit/index.js";
 import "./style.css";
 
 const chinese = document.documentElement.lang.startsWith("zh");
@@ -91,17 +91,35 @@ const fillLight = new THREE.DirectionalLight("#ffffff", 0.8);
 fillLight.position.set(2.9, -0.35, -2.8);
 scene.add(fillLight);
 
+// What the table is worth with the book lying squarely on it. Scaled down by
+// the book's attitude every frame; see updateGroundShadow.
+const TABLE_SHADOW_OPACITY = 0.28;
+
 const table = new THREE.Mesh(
   new THREE.PlaneGeometry(18, 18),
   // ShadowMaterial only ever darkens the shadowed area and is otherwise fully
   // transparent, so it blends to scene.background (white) instead of showing
   // as a lit gray plane under ACES tone mapping wherever no shadow falls.
-  new THREE.ShadowMaterial({ opacity: 0.28 }),
+  new THREE.ShadowMaterial({ opacity: TABLE_SHADOW_OPACITY }),
 );
 table.rotation.x = -Math.PI / 2;
 table.position.y = -0.035;
 table.receiveShadow = true;
 scene.add(table);
+
+// Hand the table back to the book as it is turned over. The plane is fixed in
+// the world, so once the book is up on edge the key light lands its silhouette
+// well clear of the book and ShadowMaterial draws that as a flat grey slab on
+// the white page — the pale band beside the book. See groundShadowStrength for
+// the rule and the measurements behind it. Runs from the rig's rotation, which
+// the controller has already written for this frame by the time it calls back.
+function updateGroundShadow() {
+  const strength = groundShadowStrength(bookRig.rotation.z);
+  table.material.opacity = TABLE_SHADOW_OPACITY * strength;
+  // Below this the shadow is under a 16-bit colour step on the background, so
+  // the draw is only a draw. Skipping it also skips the depth write.
+  table.visible = strength > 0.002;
+}
 
 const bookRig = new THREE.Group();
 bookRig.rotation.set(0, 0, 0);
@@ -135,6 +153,7 @@ const controller = new BookController({
   reducedMotion,
   onBeforeRender: () => {
     refreshDirtyPageNormals();
+    updateGroundShadow();
     updateStatus();
   },
 });

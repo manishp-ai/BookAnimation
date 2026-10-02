@@ -32,7 +32,7 @@ test("reader has no on-screen navigation or rotation buttons and is driven by ge
   assert.doesNotMatch(html, /id="previous-page"|id="next-page"|id="rotate-view"/);
   assert.doesNotMatch(main, /rotateMode|rotateButton|previousButton|nextButton/);
   assert.doesNotMatch(styles, /\.page-button/);
-  assert.match(main, /import \{ BookController \} from "\.\/book-kit\/index\.js"/);
+  assert.match(main, /import \{ BookController(, [\w, ]+)? \} from "\.\/book-kit\/index\.js"/);
   assert.match(main, /new BookController\(/);
   assert.match(main, /controller\.bindKeyboard\(/);
 });
@@ -153,6 +153,16 @@ test("3D Book 2 renders soft dynamic shadows and refreshes every deformed sheet'
   assert.match(binding, /this\.#refreshLeafShadows\(\);\n\n    if \(pose\.spineAngle !== this\.#appliedSpineAngle/);
   assert.match(main, /dirtySheets\.add\(sheet\)/);
   assert.match(main, /for \(const sheet of dirtySheets\)/);
+  // The table only keeps its shadow while the book is lying on it. Spun up on
+  // edge the key light lands the silhouette clear of the book, where
+  // ShadowMaterial draws it as a flat grey slab on the white page — the pale
+  // band. Driven from the rig's spin, which the controller has already written
+  // by the time it calls back, and skipped outright once it is imperceptible.
+  assert.match(main, /function updateGroundShadow\(\) \{/);
+  assert.match(main, /groundShadowStrength\(bookRig\.rotation\.z\)/);
+  assert.match(main, /table\.material\.opacity = TABLE_SHADOW_OPACITY \* strength/);
+  assert.match(main, /table\.visible = strength > 0\.002/);
+  assert.match(main, /refreshDirtyPageNormals\(\);\n    updateGroundShadow\(\);/);
   assert.match(main, /refreshDirtyPageNormals\(\)/);
   assert.match(main, /sheet\.page\.geometry\.computeVertexNormals\(\)/);
 });

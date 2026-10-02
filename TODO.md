@@ -13,9 +13,13 @@ Open items with enough detail to act on without rediscovering them.
 
 ## Before merge (temporary tooling — none of this ships)
 
-- `tools/inspect.html`, `tools/inspect.mjs`, `tools/invariants.mjs`, `_shots/`,
+- `tools/inspect.html`, `tools/inspect.mjs`, `tools/invariants.mjs`,
   `_spine-shot.html`, the `shotSink` middleware in `vite.config.js`, and the
   `reference-flipbook` entry in `.claude/launch.json`.
+- `_shots/` is untracked and gitignored now, so captures no longer reach the
+  repo — but 216 of them are still in history, and the directory is still on
+  disk and still written to by `shotSink`. It goes away with the middleware
+  above; nothing else needs doing for it.
 - `tools/inspect.html` is also stale: it still contains the `.library` nav and
   the three `.page-button` controls that were removed from `index.html`.
 - `public/books/world-passport/spine.jpg` is orphaned — nothing loads it.

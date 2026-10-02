@@ -37,6 +37,13 @@ What worked:
 - Worth knowing: `requestAnimationFrame` fires in this preview sandbox now. It
   did not in the two prior sessions, which shaped how they verified things.
 
+- Verified the turn-over re-seat on screen, both directions. Shut at the end,
+  turned over, opened: Spread 1 of 92, the fresh read Boss asked for. Shut at
+  the start, turned over, opened: Spread 91 of 92. Nothing jumps at the swap.
+- Made the book bring no backdrop with it, on Boss's ask: transparent canvas,
+  no background anywhere in the app's own CSS. Checked against a checkerboard
+  on the host page and in both light and dark host schemes.
+
 What's still broken / unfinished:
 - Between roughly a tenth and a third of a turn the shadow is fading while the
   slab is still growing, so a little of it is still visible there. It stays
@@ -50,12 +57,10 @@ What's still broken / unfinished:
   itself.
 
 Not yet verified:
-- The turn-over re-seat shipped in `963298e` has still never been watched
-  happen on screen — it is covered by a node harness that drives the real
-  controller. Now that RAF fires in the preview, this is finally checkable.
 - Rotation *feel* (spring rate, substepping) is covered by unit test only.
+- The book on a busy or mid-tone host background. Only light and dark plain
+  pages, plus one checkerboard, have been looked at.
 
 Next recommended action:
-- Watch the turn-over re-seat happen in the browser: read to the end, shut the
-  book, turn it over, open it. It is the one shipped behaviour with no
-  on-screen confirmation behind it, and the sandbox can now show it.
+- The mobile (max-width 620px) and reduced-motion passes on the closing step —
+  the largest thing in TODO.md that has never been looked at.

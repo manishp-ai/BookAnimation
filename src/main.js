@@ -35,13 +35,17 @@ const MAX_TEXTURE_ANISOTROPY = 4;
 const CACHED_BOOK_LIMIT = 2;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color("#ffffff");
+// No background. The book is an object, not a picture of one on a white page:
+// the canvas clears to nothing and whatever the book is placed on shows
+// through. Nothing in here may assume a backdrop — see the table's material.
+scene.background = null;
 
 const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 20);
 camera.position.set(0, 5, 0);
 camera.up.set(0, 0, -1);
 camera.lookAt(0, 0, 0);
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+renderer.setClearColor(0x000000, 0);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1;
@@ -97,9 +101,11 @@ const TABLE_SHADOW_OPACITY = 0.28;
 
 const table = new THREE.Mesh(
   new THREE.PlaneGeometry(18, 18),
-  // ShadowMaterial only ever darkens the shadowed area and is otherwise fully
-  // transparent, so it blends to scene.background (white) instead of showing
-  // as a lit gray plane under ACES tone mapping wherever no shadow falls.
+  // ShadowMaterial writes nothing at all where no shadow falls, which is the
+  // only thing that lets the book be an object on a transparent canvas: any
+  // material with a colour would render the whole plane and put a stage back
+  // under it. What it does write is black at `opacity`, so the shadow carries
+  // its own alpha and darkens whatever the book is placed on.
   new THREE.ShadowMaterial({ opacity: TABLE_SHADOW_OPACITY }),
 );
 table.rotation.x = -Math.PI / 2;

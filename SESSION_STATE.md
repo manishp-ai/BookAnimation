@@ -1,53 +1,52 @@
-# Session State — updated 2026-10-02 (the pale band)
+# Session State — updated 2026-10-02 (the pale band, then the backdrop)
 
 Status: COMPLETE
-Task: Find and fix the wide pale band Boss sees beside the book when an open
-book is rotated.
+Task: Fix the pale band beside a rotated open book; verify the turn-over
+re-seat on screen; make the book an object with no backdrop of its own.
 Branch / worktree: `fix/passport-spine-hinge`   Recovery point: `963298e`
 
 Done:
-- Reproduced the band and identified it. It is not geometry: it is the key
-  light's cast shadow landing on the fixed table plane once the book is spun
-  off flat. An A/B that changed one thing — hiding the table — removed the
-  band and left the book pixel-identical.
-- `src/book-kit/orbit.js` — `groundShadowStrength(spin)`, how much ground
-  shadow the attitude has earned. Keyed to the spin and never the tilt.
-- `src/main.js` — `updateGroundShadow()` on `onBeforeRender`, scaling the new
-  `TABLE_SHADOW_OPACITY` and skipping the draw once imperceptible.
-- `src/book-kit/index.js` — exported alongside the rest of the orbit maths.
+- The pale band. Reproduced and identified: not geometry, but the key light's
+  cast shadow landing on the fixed table plane once the book is spun off flat.
+  An A/B that changed one thing — hiding the table — removed the band and left
+  the book pixel-identical. Fixed with `groundShadowStrength(spin)` in
+  `src/book-kit/orbit.js` and `updateGroundShadow()` in `src/main.js`.
+  Committed as `debb7f4`.
+- The turn-over re-seat, watched on screen at last. Both directions:
+  shut at the end -> turned over -> "Cover" -> opens at Spread 1 of 92 (the
+  fresh read Boss asked for); shut at the start -> turned over -> "Back cover"
+  -> opens at Spread 91 of 92. Artwork upright and the hinge on the correct
+  side at every step, nothing jumping at the swap.
+- No backdrop. `scene.background = null`, renderer `alpha: true` clearing to
+  transparent, and every `background: #fff` gone from `src/style.css`. Checked
+  against a checkerboard set on the host page: the book composites onto it with
+  no plate and no edge fringe, shut, open and rotated.
+- Fixed what that change exposed: the loading pulse was hard-coded `#111` and
+  invisible on a dark host. It takes `currentColor` now, with `color-scheme:
+  light dark` and a `light-dark()` colour on `:root`, plus light/dark
+  `theme-color` variants.
 - `npm test` 99/99, `npm run build` clean, no console errors.
-  Mutation-checked: returning 1 fails 3 of the new tests, exponent 2 fails the
-  one tied to the measurement.
-- Measured over 66 poses on the app's exact lighting, importing the shipped
-  function: worst cast shadow 13990 ink -> 8857, and what remains at 8857 is
-  the book lying flat the other way up, where a shadow belongs. Shut book at
-  rest untouched (716px / 413 ink either way).
-- Driven live through the real app: opened to a spread, spun to edge-on and to
-  a partial turn. No band; the resting contact shadow still reads.
-- CHANGELOG entry written, including the three rejected approaches and the
-  measurements that rejected them. TODO updated.
 
 In flight:
 - Nothing.
 
 Not started:
-- Nothing for this request.
+- Nothing for either request.
 
 Blocked on:
 - Nothing.
 
 Danger:
-- Nothing. No geometry, lighting or material was changed.
+- Nothing. No geometry, lighting or material was changed by either piece of
+  work; the book itself renders as it did.
 
 Resume by:
-- Picking up `TODO.md`. The two carried items worth most are the mobile and
-  reduced-motion passes, and watching the turn-over re-seat happen on screen —
-  now possible, see the note below.
+- Picking up `TODO.md`. The mobile and reduced-motion passes on the closing
+  step are the largest remaining item.
 
 Note: `requestAnimationFrame` DOES fire in this preview sandbox now
-(`document.visibilityState` is `visible`). The 2026-10-01 and 2026-10-02
-sessions recorded it as permanently hidden and worked around it; that
-limitation is gone, and the app can be driven and watched directly. The scene
-harness removed in `3f49823` is still absent, so the live scene objects are
-not reachable from the console — a harness built on the app's own modules
-through the dev server works instead, and is what measured this fix.
+(`document.visibilityState` is `visible`), which is what finally allowed the
+re-seat to be verified on screen. The 2026-10-01 and earlier 2026-10-02
+sessions recorded it as permanently hidden. Note also that the `computer` key
+action must send `ArrowRight`, not `Right` — the controller matches
+`event.key === "ArrowRight"` and the short name silently does nothing.

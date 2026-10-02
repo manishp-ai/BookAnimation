@@ -1,5 +1,61 @@
 # Changelog
 
+## 2026-10-02 — The book brings no backdrop with it
+
+Role: Senior Product Designer + Frontend Engineer (Three.js) + QA Engineer
+
+Status: Changed, Verified
+
+Reason:
+Boss: the book should be an object, not an element of a screen — no white
+background, no dependencies. It was painting a stage in four places: the
+scene's background colour, the GL context's opaque alpha, and `background:
+#fff` on `:root`, `html, body` and `.app-shell`.
+
+Changes:
+- `src/main.js`: `scene.background = null`, the renderer takes `alpha: true`
+  and clears to a transparent black. The canvas now composites onto whatever
+  is behind it.
+- `src/style.css`: every `background: #fff` removed. Nothing in the app paints
+  a backdrop; a host that wants one sets it on the element the book is
+  embedded in.
+- The table needed no change, and that is the point: `ShadowMaterial` writes
+  nothing where no shadow falls, so the ground is a shadow rather than a
+  plane. Any material with a colour would have put the stage straight back.
+  The comment above it said it "blends to scene.background (white)", which is
+  no longer true and now describes what actually holds.
+
+Removed/Reverted:
+- The white stage, deliberately — it was a real decision once (the contract
+  test called it "keeps the interface silent and the stage white") and is now
+  the host's to make. That test was rewritten to pin the opposite rather than
+  deleted, so nothing can quietly paint a backdrop again.
+
+Found by making the change, and fixed with it:
+- With no backdrop of its own the host's shows through, and a host in dark
+  mode renders the page black — at which point the loading pulse, hard-coded
+  `#111`, was invisible. It now takes `currentColor`, and `:root` declares
+  `color-scheme: light dark` with a `light-dark()` colour, so the only visible
+  piece of interface follows the host instead of assuming a white page.
+  `theme-color` gained light and dark variants to match.
+
+Verification:
+- `npm test` 99/99 (4 new assertions pinning transparency and 3 pinning that
+  the interface makes no assumption about the backdrop), `npm run build` clean,
+  no console errors.
+- Checked in the browser against a deliberately garish checkerboard set on the
+  host page: the book composites onto it with no plate behind it and no fringe
+  at its edges, shut, open, and rotated near edge-on. The contact shadow
+  darkens the pattern rather than covering it.
+- Checked in both host schemes: light renders exactly as before; dark shows
+  the book on black with the loading pulse light against it.
+
+Known Issues:
+- On a dark host the book's own cast shadow is close to invisible, since a
+  black shadow on a dark backdrop has little to darken. Nothing is wrong on
+  screen; it is simply what a shadow does. A host that wants the book grounded
+  should put it on something lighter than the cover.
+
 ## 2026-10-02 — The pale band beside a rotated book was the table's shadow
 
 Role: Frontend Engineer (Three.js) + QA Engineer

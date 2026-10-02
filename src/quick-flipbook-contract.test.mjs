@@ -110,10 +110,26 @@ test("books.js defines at least one edition with an even page count", async () =
   assert.match(main, /textureLoader\.loadAsync\(assetUrl\)/);
 });
 
-test("3D Book 2 keeps the interface silent and the stage white", () => {
+test("3D Book 2 keeps the interface silent and brings no stage with it", () => {
   assert.doesNotMatch(html, /QUICK FLIPBOOK STUDY|FOUR EDITIONS|CLICK EITHER SIDE|PREV|NEXT/);
-  assert.match(styles, /background:\s*#fff/);
-  assert.match(main, /scene\.background = new THREE\.Color\("#ffffff"\)/);
+  // The book is an object, not a picture of one on a white page. The canvas
+  // clears to nothing and the page paints nothing behind it, so the book
+  // composites onto whatever it is placed on. A backdrop is the host's to
+  // choose; anything here that painted one would be a dependency the book
+  // cannot be lifted out of.
+  assert.doesNotMatch(styles, /background:\s*(#fff|#ffffff|white)\b/);
+  assert.match(main, /scene\.background = null/);
+  assert.match(main, /new THREE\.WebGLRenderer\(\{ canvas, antialias: true, alpha: true \}\)/);
+  assert.match(main, /renderer\.setClearColor\(0x000000, 0\)/);
+  // ShadowMaterial is the only thing keeping the ground from becoming a stage
+  // again: it writes nothing where no shadow falls, so the table is a shadow
+  // and not a plane.
+  assert.match(main, /new THREE\.ShadowMaterial\(\{ opacity: TABLE_SHADOW_OPACITY \}\)/);
+  // With no backdrop of its own, the host's can be dark, so the only visible
+  // piece of interface may not name a colour that assumes a light one.
+  assert.match(styles, /color-scheme: light dark/);
+  assert.match(styles, /background: currentColor/);
+  assert.doesNotMatch(styles, /background:\s*#111/);
 });
 
 test("3D Book 2 uses a straight-on fitted camera and shadow-responsive paper materials", () => {

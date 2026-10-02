@@ -10,11 +10,19 @@
   font-display: block;
 }
 
+/* Nothing here paints a background. The canvas clears to transparent and the
+   book is an object standing on whatever it is put on, rather than a picture
+   of a book on a white page. Anything that wants a backdrop sets one on the
+   element this is embedded in; the book does not bring its own.
+   Which means the little interface there is cannot assume one either: the
+   colour follows the host's scheme, and the loading pulse takes it from
+   `currentColor` rather than naming a dark grey that would disappear on a
+   dark page. */
 :root {
-  color: #111;
+  color-scheme: light dark;
+  color: light-dark(#111, #ededed);
   font-family: Arial, sans-serif;
   font-synthesis: none;
-  background: #fff;
 }
 
 * {
@@ -28,7 +36,6 @@ body {
   min-width: 320px;
   min-height: 100%;
   overflow: hidden;
-  background: #fff;
 }
 
 button { font: inherit; }
@@ -38,7 +45,6 @@ button { font: inherit; }
   width: 100vw;
   height: 100svh;
   overflow: hidden;
-  background: #fff;
 }
 
 #book-scene {
@@ -83,7 +89,7 @@ button { font: inherit; }
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: #111;
+  background: currentColor;
   animation: pulse 850ms ease-in-out infinite;
 }
 

@@ -14,12 +14,14 @@ Open items with enough detail to act on without rediscovering them.
 ## Carried over
 
 - Mobile (max-width 620px) and reduced-motion passes on the closing step.
-- A real-browser pass on rotation *feel*, and on turning a shut book over to
-  re-seat it. Both are covered by a node harness that drives the real
-  controller; the re-seat has still not been watched happen on screen.
-  `requestAnimationFrame` does now fire in the preview sandbox — it did not in
-  the 2026-10-01/02 sessions — so this is finally checkable by driving the app
-  with pointer events, as the ground-shadow fix was.
+- The book now composites onto a transparent canvas, so a host can put it on
+  anything. Only light and dark host pages have been looked at. A busy or
+  mid-tone backdrop has not, and the cover is dark enough that its silhouette
+  could get lost against one. If the book is ever embedded somewhere real,
+  check it there before assuming it reads.
+- A real-browser pass on rotation *feel* (spring rate, substepping). Covered by
+  unit test only. The turn-over re-seat that shared this item has now been
+  watched on screen in both directions and is done.
 - Reinstating a scene harness, if deeper geometry work is ever needed again.
   The one removed here exposed the live scene on `globalThis.__binding` behind
   a `__BINDING_HARNESS__` flag, with offscreen render-target capture posting

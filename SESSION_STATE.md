@@ -43,6 +43,19 @@ Done (second request — pages through the cover):
   5 after.
 - `npm test` 85/85, `npm run build` clean, no console errors.
 
+Done (third request — turning a shut book over):
+- `src/book-kit/orbit.js` — `facing()` and `reseatHalfTurn()`.
+- `src/book-kit/BookController.js` — `#reseatIfTurnedOver()` in the tick. A
+  book shut at either end and turned past edge-on re-seats at the other end
+  with the half turn taken back out of the spin, so nothing moves on screen
+  but the cover facing you is the one that opens.
+- Tests: the mirror property in `binding-geometry.test.mjs`, the pure rule in
+  `orbit.test.mjs`, and a new `BookController.reseat.test.mjs` that drives the
+  real controller in node (RAF never fires in this sandbox, so the render loop
+  cannot be reached in a browser). Mutation-checked: 5 of its 6 fail with the
+  feature disabled.
+- `npm test` 96/96, `npm run build` clean, no console errors.
+
 In flight:
 - Nothing. Committed as `cfa0cf3` on `fix/passport-spine-hinge`.
 

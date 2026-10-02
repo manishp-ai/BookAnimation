@@ -21,7 +21,9 @@ export {
   ORBIT_TILT_LIMIT,
   OrbitSpring,
   clamp,
+  facing,
   nextOrbitTarget,
   normalizeTurns,
+  reseatHalfTurn,
   shortestAngleTo,
 } from "./orbit.js";

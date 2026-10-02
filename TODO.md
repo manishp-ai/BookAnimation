@@ -14,7 +14,9 @@ Open items with enough detail to act on without rediscovering them.
 ## Carried over
 
 - Mobile (max-width 620px) and reduced-motion passes on the closing step.
-- A real-browser pass on rotation feel. The preview sandbox used in these
+- A real-browser pass on rotation feel, and on turning a shut book over to
+  re-seat it (added 2026-10-02; covered by a node harness that drives the real
+  controller, but never seen on screen). The preview sandbox used in these
   sessions never fires `requestAnimationFrame` (`document.visibilityState` is
   permanently `hidden`), so anything that only reaches the screen through the
   render loop cannot be verified there.

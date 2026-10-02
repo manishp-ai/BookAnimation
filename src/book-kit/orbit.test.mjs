@@ -4,8 +4,10 @@ import {
   ORBIT_TILT_LIMIT,
   OrbitSpring,
   clamp,
+  facing,
   nextOrbitTarget,
   normalizeTurns,
+  reseatHalfTurn,
   shortestAngleTo,
 } from "./orbit.js";
 
@@ -75,6 +77,41 @@ test("a long spin is wound back whole turns at a time, invisibly", () => {
   normalizeTurns(settled);
   assert.equal(settled.value, -2);
   assert.equal(settled.target, 1);
+});
+
+// A shut book turned over has to open from the cover now facing you. Seating
+// it at its other end is itself a half turn, so the spin gives that half turn
+// back and the swap is invisible. These are the two halves of that rule.
+test("which face is toward the camera flips every half turn, at the edge-on moment", () => {
+  assert.equal(facing(0), 1, "square on");
+  assert.equal(facing(Math.PI), -1, "turned over");
+  assert.equal(facing(-Math.PI), -1, "turned over the other way");
+  assert.equal(facing(2 * Math.PI), 1, "all the way round");
+
+  // The crossing is a quarter turn out, where the book is edge-on and there
+  // is nothing to see change.
+  assert.equal(facing(Math.PI / 2 - 0.01), 1);
+  assert.equal(facing(Math.PI / 2 + 0.01), -1);
+});
+
+test("re-seating always leaves the book the right way up, by the shorter way round", () => {
+  // normalizeTurns keeps the spin inside a full turn either side, so that is
+  // the range the re-seat has to cope with.
+  for (let spin = -6.28; spin <= 6.28; spin += 0.01) {
+    if (facing(spin) === 1) continue;           // nothing to do, not turned over
+    const half = reseatHalfTurn(spin);
+    const after = spin - half;
+
+    // Self-stabilising: one swap is always enough, so it can never loop.
+    assert.equal(facing(after), 1, `spin ${spin.toFixed(2)} -> ${after.toFixed(2)}`);
+    // And it unwinds by exactly a half turn, taken off the near side — never
+    // the long way round.
+    assert.ok(Math.abs(half) - Math.PI < 1e-12, "a half turn, no more");
+    assert.ok(
+      Math.abs(after) <= Math.abs(spin) + 1e-12,
+      `${spin.toFixed(2)} should not be sent further from rest`,
+    );
+  }
 });
 
 test("set() snaps the spring immediately with no residual velocity", () => {

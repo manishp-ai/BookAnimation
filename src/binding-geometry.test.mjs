@@ -69,6 +69,43 @@ test("the boards overhang the text block on every edge but the hinge", () => {
   assert.ok(dimensions.square / EDITION.caseHeight < 0.03, "a lip, not a margin");
 });
 
+// What lets a finished book be turned over and opened again from the top
+// without anything moving on screen: the shut-at-the-end pose is the
+// shut-at-the-start pose rotated half a turn, and the axis it is rotated
+// about is the same one the 360° drag spins. Seating the book at the other
+// end and taking that half turn back out of the spin is therefore a no-op to
+// look at. If this stops holding, that swap becomes a visible jump.
+test("the two shut poses are the same book, half a turn apart", () => {
+  const shut = bindingPose(0, EDITION.leafCount);
+  const shutAgain = bindingPose(bindingSteps(EDITION.leafCount), EDITION.leafCount);
+
+  assert.ok(near(shutAgain.spineAngle - shut.spineAngle, Math.PI), "spine");
+  assert.ok(near(shutAgain.coverAngle - shut.coverAngle, Math.PI), "front board");
+  assert.ok(near(shutAgain.backCoverAngle - shut.backCoverAngle, Math.PI), "back board");
+
+  // A half turn about that axis sends (x, y) to (-x, -y), so every hinge has
+  // to land on the negation of where it started.
+  for (const side of ["front", "back"]) {
+    const from = jointPosition(dimensions, side, shut.spineAngle);
+    const to = jointPosition(dimensions, side, shutAgain.spineAngle);
+    assert.ok(near(to.x, -from.x), `${side} joint x`);
+    assert.ok(near(to.y, -from.y), `${side} joint y`);
+  }
+
+  // And the case occupies the mirrored span, framed by the mirrored offset —
+  // so the book is not just the same shape but in the same place on screen.
+  const span = caseExtent(dimensions, shut.spineAngle, shut.coverAngle, shut.backCoverAngle);
+  const spanAgain = caseExtent(
+    dimensions,
+    shutAgain.spineAngle,
+    shutAgain.coverAngle,
+    shutAgain.backCoverAngle,
+  );
+  assert.ok(near(spanAgain.min, -span.max), "span min");
+  assert.ok(near(spanAgain.max, -span.min), "span max");
+  assert.ok(near(centringOffset(dimensions, 1, 1), -centringOffset(dimensions, 0, 0)), "centring");
+});
+
 test("the square cannot be set so deep that it eats the text block", () => {
   const absurd = caseDimensions({ ...EDITION, square: 99 });
   assert.ok(absurd.leafWidth > 0 && absurd.leafHeight > 0);

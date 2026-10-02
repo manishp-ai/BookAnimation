@@ -1,5 +1,73 @@
 # Changelog
 
+## 2026-10-02 — A shut book turned over opens from the cover now on top
+
+Role: Frontend Engineer (Three.js) + QA Engineer
+
+Status: Added, Verified
+
+Reason:
+Boss: read the book to the end, shut it, turn it over, and opening it should
+open from the cover now facing you — not unwind the way it came. Only when
+the book is fully shut, never mid-spread. Confirmed with Boss that it should
+apply at both ends, and that the read restarting from page one is wanted.
+
+The geometry makes this almost free. The two shut poses are the same book
+half a turn apart: every angle in the shut-at-the-end pose is the
+shut-at-the-start pose plus π, and every joint sits at the negation of where
+it started — and (x, y) -> (-x, -y) IS a half turn about world Z, the very
+axis `rig.rotation.z` spins. So seating the book at its other end and taking
+that same half turn back out of the spin lands on a pose identical to the one
+already on screen: same silhouette, same hinge side, same cover facing you.
+The swap is invisible, and the ordinary forward controls then do the rest.
+
+Changes:
+- `src/book-kit/orbit.js`: `facing(spin)` — which way up the book is, +1 while
+  the face it started with is toward the camera, -1 once a turn has brought
+  the other round. The crossing is at a quarter turn, which is exactly where
+  the book is edge-on and there is least to see change. `reseatHalfTurn(spin)`
+  — the half turn to give back, signed so it comes off the near side instead
+  of winding the long way round.
+- `src/book-kit/BookController.js`: `#reseatIfTurnedOver()`, called from the
+  tick after the spin springs update and before the rotation reaches the rig,
+  so the frame that swaps ends also draws the corrected rotation. Re-seats via
+  the `progress` setter, which clears the engine's step — `currentPage` would
+  have sent the book travelling to the far end instead. Guarded to shut
+  (`progress` exactly 0 or `steps`), settled (`currentPage === progress * 2`,
+  which is false on the frame a turn has been asked for but not yet stepped),
+  and untouched by a gesture, a load or a lifted hover preview.
+- Self-stabilising: after the swap the book is no longer turned over, so it
+  cannot fire twice. Keep spinning and it fires again every half turn, which
+  is correct — every half turn genuinely does turn the book over.
+
+Verification:
+- `npm test` 96/96, `npm run build` clean, no console errors on load.
+- `src/binding-geometry.test.mjs`: a new test pins the mirror property the
+  whole thing rests on — the two shut poses are half a turn apart in every
+  angle, every joint negated, the span and the centring offset mirrored. If
+  that ever stops holding, the invisible swap becomes a visible jump.
+- `src/book-kit/orbit.test.mjs`: `facing` flips at the edge-on quarter turn;
+  and swept across the whole range `normalizeTurns` can produce, re-seating
+  always leaves the book the right way up in one move, by the shorter way
+  round, never further from rest than it started.
+- `src/book-kit/BookController.reseat.test.mjs` (new): drives the real
+  controller in node — real class, real spring, real frames, real pointer
+  events through the listeners it registers, with only a canvas and a book
+  stood in. Covers both ends, the invisibility (the pose the viewer sees runs
+  on through the swap by one ordinary frame of spin, not half a turn), that
+  idling does not oscillate, that a part-open book at 0.5/1/45/91.5 is left
+  alone, and that a turn already asked for is not hijacked.
+- Those six were mutation-checked: with the `#reseatIfTurnedOver()` call
+  commented out, five of the six fail. The sixth is the part-open case, which
+  correctly passes either way.
+
+Known Issues:
+- Not verified in a real browser. `requestAnimationFrame` never fires in this
+  session's preview sandbox (`document.visibilityState` is permanently
+  `hidden`), and the re-seat lives in the render loop, so it cannot be
+  exercised there at all. The node harness above is why this is being claimed
+  as working; a real-browser pass is still owed and is in `TODO.md`.
+
 ## 2026-10-02 — Temporary tooling removed before merge
 
 Role: Release Engineer

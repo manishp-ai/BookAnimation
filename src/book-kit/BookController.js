@@ -7,7 +7,7 @@ import {
   isActivePointer,
   shouldCompleteDrag,
 } from "./drag.js";
-import { nextOrbitTarget, normalizeTurns, OrbitSpring } from "./orbit.js";
+import { facing, nextOrbitTarget, normalizeTurns, OrbitSpring, reseatHalfTurn } from "./orbit.js";
 
 const EDGE_PREVIEW_AMOUNT = 0.055;
 const EDGE_PREVIEW_ZONE = 28;
@@ -576,6 +576,46 @@ export class BookController {
     return this.#edgePreview.amount !== this.#edgePreview.target;
   }
 
+  // A book you have read to the end, shut, and then turned over should open
+  // from the cover now facing you — not unwind the way it came.
+  //
+  // The two shut poses are the same book half a turn apart: every angle in the
+  // closed-at-the-end pose is the closed-at-the-start pose plus π, and every
+  // joint sits at the negation of where it started. (x, y) -> (-x, -y) IS a
+  // half turn about the axis the 360° drag spins, so seating the book at the
+  // other end and taking that same half turn back out of the spin lands on a
+  // pose identical to the one already on screen — same silhouette, same hinge
+  // side, same cover facing you. Nothing moves; the book is simply now the
+  // right way round to open, and the ordinary forward controls do the rest.
+  //
+  // It costs one comparison per frame and it is self-stabilising: after the
+  // swap the book is no longer turned over, so it cannot fire twice. Keep
+  // spinning and it fires again every half turn, which is correct, because
+  // every half turn genuinely does turn the book over.
+  #reseatIfTurnedOver() {
+    // Shut, at one end or the other. A book caught mid-spread is still being
+    // read — Boss was explicit that this is only for a book that is closed.
+    const end = this.#book.totalPages / 2;
+    const at = this.#book.progress;
+    if (at !== 0 && at !== end) return;
+    // A turn already under way parks `currentPage` at its goal while
+    // `progress` is still at the end it is leaving; re-seating on that frame
+    // would hijack the turn the reader just asked for.
+    if (this.#book.currentPage !== at * 2) return;
+    if (this.#pointerStart || this.#loading || this.#edgePreview.baseSheet !== null) return;
+    if (facing(this.#orbitSpin.value) === 1) return;
+
+    // Instant, not animated: the progress setter clears the engine's step, so
+    // this re-seats the book rather than sending it travelling to the far end.
+    this.#book.progress = at === 0 ? end : 0;
+    // Out of the value and the target together, so a spin still in flight
+    // keeps both its speed and its distance left to run. Signed, so the half
+    // turn comes off the near side rather than winding the long way round.
+    const half = reseatHalfTurn(this.#orbitSpin.value);
+    this.#orbitSpin.value -= half;
+    this.#orbitSpin.target -= half;
+  }
+
   #takeEdgePreviewForDrag() {
     if (this.#edgePreview.baseSheet === null || this.#edgePreview.target === 0) return null;
 
@@ -611,6 +651,7 @@ export class BookController {
     this.#orbitSpin.update(delta);
     this.#orbitTilt.update(delta);
     normalizeTurns(this.#orbitSpin);
+    this.#reseatIfTurnedOver();
     this.#rig.rotation.z = this.#orbitSpin.value;
     this.#rig.rotation.x = this.#orbitTilt.value;
 

@@ -101,6 +101,54 @@ test("released rotation settles physically instead of springing back to front", 
   assert.doesNotMatch(pointerUp, /shortestAngleTo/);
 });
 
+// Turning a shut book over re-seats it at the other end so it opens from the
+// cover now facing you, instead of unwinding the way it came.
+test("a shut book turned over opens from the cover now on top", () => {
+  const reseat = controller.slice(
+    controller.indexOf("#reseatIfTurnedOver() {"),
+    controller.indexOf("#takeEdgePreviewForDrag() {"),
+  );
+
+  // Fires exactly when the far face has come round. The rule itself lives in
+  // orbit.js with the rest of the pure maths, where it is properly tested;
+  // what matters here is that the controller asks it rather than re-deriving.
+  assert.match(reseat, /facing\(this\.#orbitSpin\.value\) === 1\) return/);
+
+  // Instant re-seat via the progress setter, which clears the engine's step —
+  // not currentPage, which would send the book travelling to the far end.
+  assert.match(reseat, /this\.#book\.progress = at === 0 \? end : 0/);
+  assert.doesNotMatch(reseat, /currentPage =/);
+
+  // The half turn comes out of value and target together, so a spin still in
+  // flight keeps both its speed and its distance left to run.
+  assert.match(reseat, /this\.#orbitSpin\.value -= half/);
+  assert.match(reseat, /this\.#orbitSpin\.target -= half/);
+  assert.match(reseat, /const half = reseatHalfTurn\(this\.#orbitSpin\.value\)/);
+
+  // Runs before the spin reaches the rig, so the frame that swaps ends also
+  // draws the corrected rotation — otherwise the book would show one frame
+  // half a turn out.
+  const tick = controller.slice(controller.indexOf("#tick = "));
+  assert.ok(
+    tick.indexOf("#reseatIfTurnedOver()") < tick.indexOf("rotation.z = this.#orbitSpin.value"),
+    "re-seat must run before the rotation is written",
+  );
+});
+
+test("only a shut, settled, untouched book is ever re-seated", () => {
+  const reseat = controller.slice(
+    controller.indexOf("#reseatIfTurnedOver() {"),
+    controller.indexOf("#takeEdgePreviewForDrag() {"),
+  );
+  // Mid-spread is still being read.
+  assert.match(reseat, /if \(at !== 0 && at !== end\) return/);
+  // A turn already asked for parks currentPage at its goal while progress is
+  // still at the end it is leaving; re-seating then would hijack it.
+  assert.match(reseat, /this\.#book\.currentPage !== at \* 2\) return/);
+  // And never out from under a gesture, a load, or a lifted hover preview.
+  assert.match(reseat, /this\.#pointerStart \|\| this\.#loading \|\| this\.#edgePreview\.baseSheet !== null/);
+});
+
 test("cursor state is scoped to the canvas, not the document", () => {
   // A component meant to be dropped in anywhere on a page must not reach
   // outside its own element for something as visible as the cursor.

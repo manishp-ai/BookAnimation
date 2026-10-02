@@ -42,6 +42,22 @@ export function normalizeTurns(spring) {
   spring.target -= whole;
 }
 
+// Which way up the book is after `spin` radians of turntable: 1 while the face
+// it started with is toward the camera, -1 once a turn has brought the other
+// one round. The crossing is at a quarter turn either way — exactly where the
+// book is edge-on, and so the least visible moment for anything to change.
+export function facing(spin) {
+  return Math.cos(spin) < 0 ? -1 : 1;
+}
+
+// The half turn to take back out of the spin when a shut book is re-seated at
+// its other end, because seating it there is itself a half turn and the two
+// have to cancel for the swap to be invisible. Signed, so it comes off the
+// near side instead of winding the long way round.
+export function reseatHalfTurn(spin) {
+  return Math.PI * Math.sign(spin);
+}
+
 // Same tension/friction/mass as Ashen Press's Spring (index.html:963-970).
 export class OrbitSpring {
   constructor(tension = 80, friction = 6, mass = 1) {

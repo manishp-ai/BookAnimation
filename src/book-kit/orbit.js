@@ -29,6 +29,19 @@ export function nextOrbitTarget({ spin, tilt }, dx, dy) {
   };
 }
 
+// Keep a freely-spinning axis from accumulating turn after turn. Taking whole
+// turns off the spring's value and its target together is invisible — the book
+// is left in exactly the same pose, moving at exactly the same rate — but it
+// stops a long session of dragging from drifting out to angles where a float's
+// spacing starts to coarsen the motion, and keeps `shortestAngleTo` cheap.
+export function normalizeTurns(spring) {
+  const turn = Math.PI * 2;
+  if (Math.abs(spring.value) < turn) return;
+  const whole = Math.trunc(spring.value / turn) * turn;
+  spring.value -= whole;
+  spring.target -= whole;
+}
+
 // Same tension/friction/mass as Ashen Press's Spring (index.html:963-970).
 export class OrbitSpring {
   constructor(tension = 80, friction = 6, mass = 1) {
@@ -46,12 +59,23 @@ export class OrbitSpring {
     this.velocity = 0;
   }
 
+  // Integrated in fixed substeps rather than one step per frame. A single
+  // explicit-Euler step of a whole frame goes unstable at this tension once
+  // the frame is long, and the clamp that used to hold it back did so by
+  // throwing the surplus time away — so every dropped frame left the rotation
+  // running visibly slower than the hand that started it. Substepping spends
+  // the whole elapsed time at a rate the integrator is stable at, which makes
+  // the motion identical at 30fps and 144fps.
   update(dt) {
-    const step = Math.min(dt, 1 / 30);
-    const acceleration = (this.tension * (this.target - this.value) - this.friction * this.velocity)
-      / this.mass;
-    this.velocity += acceleration * step;
-    this.value += this.velocity * step;
+    let remaining = Math.min(Math.max(dt, 0), 0.1);
+    while (remaining > 0) {
+      const step = Math.min(remaining, 1 / 240);
+      const acceleration = (this.tension * (this.target - this.value) - this.friction * this.velocity)
+        / this.mass;
+      this.velocity += acceleration * step;
+      this.value += this.velocity * step;
+      remaining -= step;
+    }
   }
 
   get settled() {

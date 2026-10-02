@@ -4,57 +4,79 @@ import test from "node:test";
 
 const main = await readFile(new URL("./main.js", import.meta.url), "utf8");
 const binding = await readFile(new URL("./binding.js", import.meta.url), "utf8");
+const geometry = await readFile(new URL("./binding-geometry.js", import.meta.url), "utf8");
 const books = await readFile(new URL("./books.js", import.meta.url), "utf8");
 const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
 const styles = await readFile(new URL("./style.css", import.meta.url), "utf8");
 const config = await readFile(new URL("../vite.config.js", import.meta.url), "utf8");
 const bindingLabel = await readFile(new URL("./spine-label.js", import.meta.url), "utf8");
+const bookKit = await readFile(new URL("./book-kit/BookController.js", import.meta.url), "utf8");
 
 // The Quick FlipBook lifecycle still drives every page turn; the case binding
 // owns the engine now, so the calls live in binding.js and main.js talks to
-// the binding.
+// the binding through the reusable book-kit controller.
 test("3D Book 2 uses the requested Quick FlipBook lifecycle", () => {
   assert.match(binding, /import \{ FlipBook \} from "quick_flipbook"/);
   assert.match(binding, /new FlipBook\(/);
   assert.match(binding, /this\.#engine\.setPages\(/);
   assert.match(binding, /this\.#engine\.progress = pose\.leafProgress/);
-  assert.match(main, /binding\.animate\(delta\)/);
+  assert.match(bookKit, /this\.#book\.animate\(delta\)/);
 });
 
-test("reader supports buttons, pointer gestures, and keyboard navigation", () => {
-  assert.match(main, /binding\.nextPage\(\)/);
-  assert.match(main, /binding\.previousPage\(\)/);
-  assert.match(main, /pointerdown/);
-  assert.match(main, /pointermove/);
-  assert.match(main, /pointerleave/);
-  assert.match(main, /pointercancel/);
-  assert.doesNotMatch(html, /id="book-interaction"/);
-  assert.doesNotMatch(main, /interactionSurface/);
-  assert.match(main, /canvas\.addEventListener\("pointermove"/);
-  assert.match(main, /start\.pendingFraction = fraction/);
-  assert.match(main, /const preview = takeEdgePreviewForDrag\(\)/);
-  assert.match(main, /startFraction: preview\?\.fraction \?\? 0/);
-  assert.match(main, /start\.startFraction/);
-  assert.match(main, /function applyDragFrame\(\)/);
-  assert.match(main, /binding\.progress = start\.sheet \+ start\.direction \* start\.pendingFraction/);
-  assert.match(main, /const dragOwnsFrame = applyDragFrame\(\)/);
-  assert.match(main, /if \(!dragOwnsFrame\) binding\.animate\(delta\)/);
-  assert.match(main, /shouldCompleteDrag\(start\.fraction, elapsed\)/);
-  assert.match(main, /if \(!isActivePointer\(start, event\.pointerId\)\) return/);
-  assert.match(main, /if \(!isActivePointer\(pointerStart, event\.pointerId\)\) return/);
-  assert.match(main, /ArrowRight/);
-  assert.match(main, /ArrowLeft/);
+// The on-screen prev/next/rotate buttons are gone — the reader is driven by
+// gesture alone: drag the book to turn a page, drag the space around it to
+// spin the book, arrow keys as an accessible fallback. All of that lives in
+// the reusable src/book-kit package; main.js only wires it to this app's
+// scene and calls it via `controller`.
+test("reader has no on-screen navigation or rotation buttons and is driven by gesture", () => {
+  assert.doesNotMatch(html, /id="previous-page"|id="next-page"|id="rotate-view"/);
+  assert.doesNotMatch(main, /rotateMode|rotateButton|previousButton|nextButton/);
+  assert.doesNotMatch(styles, /\.page-button/);
+  assert.match(main, /import \{ BookController \} from "\.\/book-kit\/index\.js"/);
+  assert.match(main, /new BookController\(/);
+  assert.match(main, /controller\.bindKeyboard\(/);
+});
+
+test("the book-kit controller drives page turns, rotation, and keyboard navigation", () => {
+  assert.match(bookKit, /this\.#book\.nextPage\(\)/);
+  assert.match(bookKit, /this\.#book\.previousPage\(\)/);
+  assert.match(bookKit, /pointerdown/);
+  assert.match(bookKit, /pointermove/);
+  assert.match(bookKit, /pointerleave/);
+  assert.match(bookKit, /pointercancel/);
+  assert.match(bookKit, /canvas\.addEventListener\("pointermove"/);
+  assert.match(bookKit, /start\.pendingFraction = fraction/);
+  assert.match(bookKit, /const preview = this\.#takeEdgePreviewForDrag\(\)/);
+  assert.match(bookKit, /startFraction: preview\?\.fraction \?\? 0/);
+  assert.match(bookKit, /start\.startFraction/);
+  assert.match(bookKit, /#applyDragFrame\(\) \{/);
+  assert.match(bookKit, /this\.#book\.progress = start\.sheet \+ start\.direction \* start\.pendingFraction/);
+  assert.match(bookKit, /const dragOwnsFrame = this\.#applyDragFrame\(\)/);
+  assert.match(bookKit, /if \(!dragOwnsFrame\) this\.#book\.animate\(delta\)/);
+  assert.match(bookKit, /shouldCompleteDrag\(start\.fraction, elapsed\)/);
+  assert.match(bookKit, /if \(!isActivePointer\(start, event\.pointerId\)\) return/);
+  assert.match(bookKit, /if \(!isActivePointer\(this\.#pointerStart, event\.pointerId\)\) return/);
+  assert.match(bookKit, /ArrowRight/);
+  assert.match(bookKit, /ArrowLeft/);
+});
+
+test("empty space around the book drives a 360° rotation, gated by the same hit test that gates page drag", () => {
+  assert.match(bookKit, /nextOrbitTarget\(/);
+  assert.match(bookKit, /this\.#orbitSpin\.update\(delta\)/);
+  assert.match(bookKit, /this\.#orbitTilt\.update\(delta\)/);
+  assert.match(bookKit, /this\.#rig\.rotation\.z = this\.#orbitSpin\.value/);
+  assert.match(bookKit, /this\.#rig\.rotation\.x = this\.#orbitTilt\.value/);
 });
 
 test("the page edge offers a restrained, motion-safe hover preview", () => {
-  assert.match(main, /const EDGE_PREVIEW_AMOUNT = 0\.055/);
-  assert.match(main, /const EDGE_PREVIEW_ZONE = 28/);
+  assert.match(bookKit, /const EDGE_PREVIEW_AMOUNT = 0\.055/);
+  assert.match(bookKit, /const EDGE_PREVIEW_ZONE = 28/);
   assert.match(main, /prefers-reduced-motion: reduce/);
-  assert.match(main, /edgePreviewDirection\(/);
-  assert.match(main, /edgePreviewPose\(/);
-  assert.match(main, /animateEdgePreview\(delta\)/);
-  assert.match(main, /edgePreview\.target = EDGE_PREVIEW_AMOUNT/);
-  assert.match(main, /sheet\.flip\(pose\.pageProgress, edgePreview\.direction, pose\.curveIntensity\)/);
+  assert.match(bookKit, /edgePreviewDirection\(/);
+  assert.match(bookKit, /edgePreviewPose\(/);
+  assert.match(bookKit, /this\.#animateEdgePreview\(delta\)/);
+  assert.match(bookKit, /this\.#edgePreview\.target = EDGE_PREVIEW_AMOUNT/);
+  assert.match(bookKit, /sheet\.flip\(pose\.pageProgress, this\.#edgePreview\.direction, pose\.curveIntensity\)/);
   assert.deepEqual(styles.match(/cursor:\s*[^;]+;/g), ["cursor: default;"]);
   assert.doesNotMatch(main, /classList\.(?:add|remove)\("is-dragging"\)/);
   assert.doesNotMatch(styles, /#book-scene\s*\{[^}]*pointer-events:\s*none/s);
@@ -158,12 +180,15 @@ test("3D Book 2 memoizes settled sheets and bounds the material cache", () => {
   assert.match(main, /material\.dispose\(\)/);
 });
 
-test("3D Book 2 renders on demand and parks a settled edge preview", () => {
-  assert.match(main, /function requestRender\(\)/);
-  assert.match(main, /let animationFrame = null/);
-  assert.match(main, /const previewNeedsFrame = animateEdgePreview\(delta\)/);
-  assert.match(main, /if \(previewNeedsFrame \|\| \(!dragOwnsFrame && progressChanged\)\) continueRendering\(\)/);
-  assert.match(main, /stop feeding the modifier stack identical poses/);
+test("the book-kit controller renders on demand, in one loop, and parks a settled edge preview", () => {
+  assert.match(bookKit, /requestRender\(\) \{/);
+  assert.match(bookKit, /#frame = null/);
+  assert.match(bookKit, /const previewNeedsFrame = this\.#edgePreviewEnabled \? this\.#animateEdgePreview\(delta\) : false/);
+  assert.match(bookKit, /if \(previewNeedsFrame \|\| \(!dragOwnsFrame && progressChanged\) \|\| orbitSettling\)/);
+  assert.match(bookKit, /stop feeding the modifier stack identical poses/);
+  // One render loop, not the old two independent requestAnimationFrame
+  // chains (page animation and orbit used to run separately).
+  assert.equal((bookKit.match(/requestAnimationFrame/g) ?? []).length, 2);
 });
 
 test("the book is built as a case binding, with the spine as its anchor", () => {
@@ -253,13 +278,47 @@ test("cover stiffness is one switch and nothing else", () => {
 // its anchor than it is long; at the quarter turn that excess rotates into
 // the horizontal and throws the fore-edge past the board. Measured before
 // the fix: 0.0663 past a cover half-width of 0.6815.
+// The hit test hands this list straight to a non-recursive raycast — that is
+// the whole point of it being short. The covers are Groups, which carry no
+// geometry, so handing them over unflattened left the spine strip as the only
+// thing on the book a pointer could actually hit, and every grab anywhere else
+// on the book read as empty space and spun the book instead of turning a page.
+test("the hit-test hull is meshes, not the groups the covers are", () => {
+  const hull = binding.slice(binding.indexOf("get hullMeshes()"), binding.indexOf("get steps()"));
+  assert.match(hull, /traverse\(\(object\) => \{ if \(object\.isMesh\) meshes\.push\(object\); \}\)/);
+  assert.doesNotMatch(hull, /return \[this\.#frontCover, this\.#backCover/);
+  // Read on every pointer move, so it is built once and kept until the case
+  // that produced it is torn down.
+  assert.match(hull, /if \(this\.#hull\) return this\.#hull/);
+  assert.match(binding, /this\.#spineBoard = null;\s*\n\s*this\.#hull = null;/);
+});
+
+// Measured from the cover side with the offscreen detector in tools/inspect.mjs
+// (render the covers alone, then the whole book, count cover pixels a page
+// replaced): flush-cut leaves broke 1310 pixels across 13 of 132 sampled
+// poses; with the square it is 241 across 5, and what is left is a sliver of
+// fore edge in a not-yet-shut case at the tilt limit. The square is the whole
+// difference, so it is the thing to keep honest here.
+test("the text block is trimmed inside the boards on every free edge", () => {
+  assert.match(binding, /const \{ leafWidth, leafHeight \} = dimensions/);
+  assert.match(geometry, /leafWidth: boardWidth - safeSquare/);
+  assert.match(geometry, /leafHeight: caseHeight - 2 \* safeSquare/);
+  // The hinge edge is the binding and stays flush — a square there would hang
+  // the leaves off the spine.
+  assert.doesNotMatch(geometry, /leafWidth: boardWidth - 2 \* safeSquare/);
+  assert.match(geometry, /export const SQUARE_RATIO/);
+});
+
 test("a turning leaf cannot reach further than it is long", () => {
   assert.match(binding, /sheet\.bend\.force = Math\.min\(sheet\.bend\.force \* CaseBinding\.#BEND_DEPTH, -1e-4\)/);
   assert.match(binding, /static #BEND_DEPTH = 0\.58/);
   // Only the bend. The curl and the gutter flex are what hold the resting
   // pile above the pastedown -- scaling those too drops the leaves under it
   // and the cover draws over them.
-  assert.match(binding, /sheet\.scale\.set\(leafWidth, 1, -caseHeight\)/);
+  // Sized to the text block, not to the boards — the square is the difference,
+  // and it is what keeps a curled leaf inside the cover's silhouette.
+  assert.match(binding, /sheet\.scale\.set\(leafWidth, 1, -leafHeight\)/);
+  assert.doesNotMatch(binding, /sheet\.scale\.set\(leafWidth, 1, -caseHeight\)/);
   assert.doesNotMatch(binding, /unitScale/);
 });
 
@@ -285,7 +344,7 @@ test("a limp cover droops on the engine's own law, not one invented for it", () 
 });
 
 test("the pre-rebuild spine compensations are gone and stay gone", async () => {
-  const orbit = await readFile(new URL("./orbit.js", import.meta.url), "utf8");
+  const orbit = await readFile(new URL("./book-kit/orbit.js", import.meta.url), "utf8");
   for (const source of [main, binding, orbit]) {
     assert.doesNotMatch(source, /SPINE_FLATNESS/);
     assert.doesNotMatch(source, /spineGeometryFromBounds/);

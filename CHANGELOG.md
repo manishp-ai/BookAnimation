@@ -1,6 +1,251 @@
 # Changelog
 
-## 2026-09-27 — Drag-to-orbit view and a bound spine
+## 2026-10-01 — The case gets a square, so pages stop showing through the cover
+
+Role: Frontend Engineer (Three.js) + QA Engineer
+
+Status: Fixed, Verified
+
+Reason:
+Boss reported pages passing through the cover, with a screenshot of the open
+book seen from its underside. `caseDimensions` cut the text block flush with
+the boards on all three free edges — the source said so outright
+(`leafWidth: boardWidth`, `// Leaves are cut flush with the boards' fore
+edge`, and leaves scaled to the full `caseHeight`). Measured on the live
+scene, the cover overhung the pages by exactly 0.0000 at the head and the
+tail and 0.0034 at the fore edge. Flush means a leaf's edge and a board's
+edge are the same line in space, so the moment a leaf takes up any curl — and
+every leaf here carries some — its vertices cross outside the board's
+silhouette and the text block shows through the cover.
+
+A real case is not built that way: the boards are cut larger than the block
+and overhang it by a square on the fore edge, head and tail. This book had
+none.
+
+Changes:
+- `src/binding-geometry.js`: `caseDimensions` takes a `square` (defaulting to
+  `SQUARE_RATIO`, 1.4% of page height — about 2mm on a 125mm passport, 3mm on
+  a 240mm book) and returns `square`, `leafWidth` and `leafHeight`. The hinge
+  edge stays flush, because that edge is the binding. The square is clamped so
+  an absurd value cannot eat the text block.
+- `src/binding.js`: leaves are scaled to `leafHeight`, not `caseHeight`. The
+  plane is hinged on its left edge and centred in z, so the width change takes
+  the square off the fore edge alone and the height change splits it between
+  head and tail. The boards, spine and soft-cover sheets keep `caseHeight`.
+- `tools/inspect.mjs` (temporary): `__throughCover(progress, tilt)` renders the
+  covers alone, then the whole book, from the cover side, and counts cover
+  pixels a page replaced. Shadows are disabled for both renders — the leaf
+  casts onto the cover, and a shadow appearing when the text block is shown is
+  not a page drawing through it. (Without that, the detector reported 5.4%
+  "penetration" at p=1.5 that was entirely the standing leaf's own shadow.)
+
+Verification:
+- `npm test` 85/85 (3 new: the square exists and is one deep on the fore edge
+  and one each on head and tail; an absurd or zero square is handled; the
+  binding scales leaves to the block rather than the boards). `npm run build`
+  clean. No console errors on load.
+- Live overhang measurement across progress 0→92: head and tail went from
+  exactly 0.0000 to 0.0140 at every step; the fore edge from 0.0034 to 0.0174
+  open. The only remaining zeros are the hinge edge, which is correct — flush
+  there is what being bound means.
+- `__throughCover` across 132 poses (progress × tilt, from the cover side):
+  flush-cut leaves broke 1310 cover pixels across 13 poses; with the square,
+  241 across 5. Worst pose went from 1.93% of cover pixels to 0.64%.
+
+Known Issues:
+- 241 pixels across 5 poses remain, all at the ±0.62 tilt limit and worst at
+  progress 91.9 (0.64% of cover pixels) — a case that has not finished
+  shutting, where a sliver of fore edge is legitimately in view. Not chased
+  further: it is a fifth of a percent in one frame, and an earlier blind fix
+  in this exact area is what caused the `0f47067` regression.
+- The wide pale band down the right of Boss's screenshot was **not**
+  reproduced. The square is a real defect and fixing it measurably helped, but
+  an A/B of the exact view in the report (open spread, underside, with and
+  without tilt) looks the same before and after, so that band may have another
+  cause. Boss needs to say which moment shows it.
+
+## 2026-10-01 — Page turns follow the page, not the screen
+
+Role: Frontend Engineer (Three.js) + QA Engineer
+
+Status: Fixed, Changed, Removed, Verified
+
+Reason:
+Boss reported page flipping was crooked. Two separate defects, both
+introduced while fixing the rotation boundary bug earlier in the same
+session, and both only visible once the book had been rotated at all.
+
+First, `CaseBinding.hullMeshes` returned the two cover **Groups** and the
+spine mesh, and the controller handed that list to a deliberately
+non-recursive raycast. Groups carry no geometry, so the only thing on the
+book a pointer could actually hit was the thin spine strip — every grab
+anywhere else read as empty space and spun the book instead of turning a
+page.
+
+Second, every part of a page gesture was measured in screen X: the travel,
+the completion threshold, the "is this a page drag or a scroll?" reject, the
+choice of which half of the book was grabbed, and the hover preview's edge
+zones. Screen X only matches the page while the book faces the camera
+square-on. Measured on the live scene, one world unit along the page covers
+581 screen pixels square-on, 314 at a radian of spin, 99 at 1.4, and −581 at
+half a turn — so a drag was asking for up to six times the travel it should
+(the page crawling behind the finger), and past a right angle it ran the
+page backwards.
+
+Changes:
+- `src/binding.js`: `hullMeshes` now flattens to actual meshes (5, not 3
+  entries of which 2 were empty Groups), memoised because it is read on
+  every pointer move and invalidated in `#disposeCase` where the case that
+  produced it is torn down.
+- `src/book-kit/BookController.js`: new `#pageFrame()` measures the book's
+  own spine→fore-edge and head→tail axes in canvas pixels from the rig's
+  world matrix; `#toPageSpace()` puts a client point in that frame. Drag
+  travel, the off-axis reject, the grabbed half, tap-to-turn and the hover
+  preview's edge zones are all measured there now. The axis is frozen at
+  `pointerdown` for the gesture's lifetime (free: the gesture is locked to
+  the book, so nothing can rotate it underneath) which also keeps per-move
+  work to two multiplies. `#screenMetrics()` deleted.
+- `src/book-kit/BookController.js`: a book turned so near edge-on that a
+  page is under 44px wide offers no page to grab; the pointer goes to the
+  rotation it visually sits in rather than letting a few pixels of travel
+  snap a whole page over.
+- `src/book-kit/BookController.js`: `setPointerCapture` is allowed to fail
+  (the browser throws if the pointer went up between the event being queued
+  and the handler running) and is now attempted last, after the gesture is
+  set up and rendering. Previously a throw there would abandon the handler
+  part-way through, leaving a rotation started with no render loop running.
+- `src/book-kit/orbit.js`: `OrbitSpring.update` integrates in fixed
+  substeps. The old single step clamped to 1/30s and threw the surplus time
+  away, so every dropped frame left the rotation running slower than the
+  hand that started it. Now 144fps, 60fps and a dropped-to-20fps frame land
+  within 0.5% of each other after a second.
+- `src/book-kit/orbit.js`: new `normalizeTurns()` takes whole turns off the
+  spin spring's value and target together — same pose, same speed, same
+  distance left to travel — so a long session of dragging cannot drift out
+  to angles where float spacing coarsens the motion.
+
+Removed:
+- `isPointerOverBook` and its test, from `src/book-kit/drag.js` and the
+  package's public exports. It is the flat screen rectangle the raycast
+  replaced; correct only square-on, and leaving it exported would hand the
+  next consumer of this package the same bug it just cost two fixes to get
+  rid of. A test now asserts it stays gone.
+
+Verification:
+- `npm test` 82/82 (6 new: the page-frame measurement, the frozen axis, the
+  edge-on guard, the flattened hull, the frame-rate-independent spring, the
+  turn normalisation). `npm run build` clean. No console errors on load.
+- Measured against the live scene through synthetic pointer events: a drag
+  across 40% of the page completes the turn at spin 0, 1.0 and 1.3, where
+  the old constant 387px footprint would have read the same gesture as 0.40,
+  0.22 and 0.11 — the latter two below the 0.32 completion threshold, so the
+  page would have sprung back. A drag along the page turns it at every spin
+  from 0 to π; a drag that only knows about screen-left stops working past
+  1.9 rad, which is the inversion Boss was seeing. On a book turned to 1.52
+  rad (page 20px wide) a grab starts a rotation, not a flip.
+- Hull: 5 meshes, all `isMesh`, memoised (`hullMeshes === hullMeshes`).
+- Flip geometry itself inspected head-on at progress 0.25/0.5/0.75 and
+  2.3/2.5/2.7 — square, vertical gutter, no skew. The crookedness was
+  entirely in the gesture mapping, not the geometry.
+
+Known Issues:
+- `requestAnimationFrame` never fires in this session's preview sandbox
+  (`document.visibilityState` is permanently `hidden`), so the orbit spring
+  and the drag *animation* could not be driven end-to-end in a browser. The
+  gesture decisions above were verified because they land as direct property
+  writes; the spring changes were verified by unit test only. A real-browser
+  pass on rotation feel is still outstanding, as it was before this change.
+- `shortestAngleTo` in `src/book-kit/orbit.js` now has no caller. It is
+  correct and plausibly useful to a consumer, so it was left rather than
+  removed unasked — logged in `TODO.md`.
+
+## 2026-09-28 — Gesture-only interaction, extracted into a reusable package
+
+Role: Frontend Engineer (Three.js) + Accessibility
+
+Status: Added, Changed, Removed, Refactored
+
+Reason:
+Boss asked for the on-screen prev/next/rotate buttons to be removed entirely
+and replaced with direct, physical interaction — drag the book to turn a
+page, drag the space around it to rotate it, with gesture priority locked to
+whichever the pointer started on so one can never turn into the other
+mid-drag. Boss also asked for the whole interaction system to be a
+self-contained, reusable component rather than logic wired into this one
+page.
+
+Changes:
+- `src/book-kit/` (new package): `BookController.js` owns every pointer
+  listener, the orbit spring, the edge-hover preview, and a single unified
+  render loop (previously main.js ran two independent
+  `requestAnimationFrame` chains — one for page-turn animation, one for
+  orbit — that could drift out of sync with each other). Gesture mode is
+  decided once, at `pointerdown`, by a screen-space hit test against the
+  book (`isPointerOverBook`, already existing pure logic); nothing later in
+  a gesture re-checks which side of that line the pointer is on. A released
+  rotation no longer springs back to front-on — like setting down a real
+  object, it stays where the drag left it. Cursor state is scoped to the
+  canvas element, not `document.body`, so the component doesn't reach
+  outside itself when dropped into a page with other content. `drag.js` and
+  `orbit.js` (pure math, pre-existing) moved into the package unchanged.
+- `src/binding.js`: added a `get caseWidth()` accessor — the one piece of
+  the binding's construction the interaction layer needs (to size the
+  book's on-screen hit box) that wasn't already public.
+- `index.html`, `src/style.css`: removed the `#previous-page`, `#next-page`,
+  `#rotate-view` buttons and their `.page-button`/`.reader-controls` styles.
+  The screen-reader status live region (`#page-state`) stays.
+- `src/main.js`: now ~470 lines shorter. Owns scene/camera/renderer/lighting
+  setup and book-loading as before; all pointer/keyboard/orbit/edge-preview
+  code moved out into `book-kit`, replaced with one `BookController`
+  instance wired to `binding`/`bookRig` and `controller.bindKeyboard(window)`
+  for the arrow-key fallback.
+- `package.json`: `test` script now globs both `src/*.test.mjs` and
+  `src/**/*.test.mjs` — plain `sh` globbing doesn't do `**` recursively, so
+  moving `drag.test.mjs`/`orbit.test.mjs` into `book-kit/` had silently
+  dropped them from the suite (55 tests ran, believed clean, while 12 of
+  them weren't executing at all). Caught before it shipped; both patterns
+  are needed since neither alone covers root-level and nested files.
+- `README.md`: describes the gesture-only interaction and the `book-kit`
+  package as a drop-in component for other books on the site.
+
+Removed/Reverted:
+- The `#previous-page`, `#next-page`, `#rotate-view` buttons and all
+  button-specific CSS and ARIA wiring (`aria-pressed`, `rotateMode`).
+- The window-wide "tap left/right half turns a page" fallback, which used to
+  fire for taps anywhere on the canvas including outside the book. Tap-to-
+  turn is unchanged for taps that land on the book (hit-tested the same way
+  as a drag start); a tap outside the book now starts a rotation instead.
+
+Verification:
+- `npm test`: 75/75 (up from 55 visibly-run — see the test-script fix
+  above). New `src/book-kit/BookController.test.mjs` asserts the
+  architectural properties this feature rests on: gesture mode decided once
+  and not re-evaluated mid-drag, page-drag and orbit-drag mutually exclusive
+  per pointer, no snap-back on release, cursor scoped to the canvas, a
+  single render loop, full listener cleanup on `dispose()`, and no imports
+  reaching outside the package.
+- `npm run build`: clean, 613 kB bundle (gzip 154 kB), no new warnings.
+- Live check via `tools/inspect.html`'s existing harness: a synthetic drag
+  starting just inside the book's cover moved `currentPage` 0 → 2 (a forward
+  page turn); an otherwise-identical drag starting 12px from the canvas edge
+  (outside the book) left `currentPage` unchanged, confirming the two
+  gestures route correctly and don't bleed into each other. Full pixel-level
+  visual confirmation was not possible in this session's browser-preview
+  sandbox — `requestAnimationFrame` doesn't reliably drive when that pane
+  isn't frontmost, which was confirmed to be a pre-existing sandbox
+  limitation (the unmodified prior commit shows the identical blank canvas
+  under the same tool), not a regression from this change.
+
+Result:
+The reader has no on-screen navigation chrome. Every documented gesture
+(drag the book, drag around it, tap a page, arrow keys) routes through
+`src/book-kit`, independently testable and reusable without this app.
+
+Known Issues:
+- Visual/pixel-level confirmation of the drag and rotation gestures in a
+  live browser is still owed — blocked on the sandbox limitation above, not
+  on the implementation. Recommend a manual check in a real browser tab
+  before merge.
 
 Role: Frontend Engineer (Three.js)
 

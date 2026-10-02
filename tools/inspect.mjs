@@ -134,3 +134,53 @@ globalThis.__orbitShot = (name, progress, spin, tilt, halfH = 0.72, w = 900, h =
   const shot = globalThis.__capTop(name, progress, halfH, w, h);
   return shot.finally(() => book.bookRig.rotation.set(0, 0, 0));
 };
+
+// TEMPORARY: does any page draw in front of a cover? Rendered from the cover
+// side, the covers must occlude the text block completely. Renders the covers
+// alone, then the whole book, and counts pixels where a cover was replaced —
+// which is exactly "pages passing through the cover", with no viewpoint
+// guesswork and no eyeballing.
+globalThis.__throughCover = (progress, tilt = 0, spin = Math.PI, w = 300, h = 230) => {
+  const target = new THREE.WebGLRenderTarget(w, h, { colorSpace: THREE.SRGBColorSpace });
+  const camera = new THREE.OrthographicCamera(-0.72 * w / h, 0.72 * w / h, 0.72, -0.72, 0.1, 20);
+  camera.position.set(0, 5, 0);
+  camera.up.set(0, 0, -1);
+  camera.lookAt(0, 0, 0);
+  camera.updateProjectionMatrix();
+
+  const shoot = () => {
+    const pixels = new Uint8Array(w * h * 4);
+    book.renderer.setRenderTarget(target);
+    book.renderer.render(book.scene, camera);
+    book.renderer.readRenderTargetPixels(target, 0, 0, w, h, pixels);
+    book.renderer.setRenderTarget(null);
+    return pixels;
+  };
+
+  // Shadows off for both renders: the leaf casts onto the cover, and a shadow
+  // appearing when the text block is shown is not a page drawing through it.
+  const shadows = book.renderer.shadowMap.enabled;
+  book.renderer.shadowMap.enabled = false;
+  book.bookRig.rotation.set(tilt, 0, spin);
+  book.setProgress(progress);
+  book.book.textBlock.visible = false;
+  const covers = shoot();
+  book.book.textBlock.visible = true;
+  const full = shoot();
+  book.renderer.shadowMap.enabled = shadows;
+  book.bookRig.rotation.set(0, 0, 0);
+  target.dispose();
+
+  let coverPixels = 0;
+  let broken = 0;
+  for (let i = 0; i < w * h; i += 1) {
+    const o = i * 4;
+    if (covers[o] > 245 && covers[o + 1] > 245 && covers[o + 2] > 245) continue;
+    coverPixels += 1;
+    const delta = Math.abs(covers[o] - full[o])
+      + Math.abs(covers[o + 1] - full[o + 1])
+      + Math.abs(covers[o + 2] - full[o + 2]);
+    if (delta > 40) broken += 1;
+  }
+  return { coverPixels, broken, pct: Number((100 * broken / Math.max(1, coverPixels)).toFixed(2)) };
+};

@@ -47,7 +47,36 @@ test("spine width is the text block plus both covers, and the case keeps its fin
 
 test("the case is exactly as wide overall as the edition's page ratio", () => {
   assert.ok(near(EDITION.coverThickness + dimensions.boardWidth, EDITION.caseWidth));
-  assert.equal(dimensions.leafWidth, dimensions.boardWidth, "leaves are cut flush with the covers");
+});
+
+// The square: the lip of board that overhangs the text block on the three
+// edges that are not the hinge. Leaves used to be cut flush with the boards,
+// which meant a leaf's edge and a board's edge were the same line in space —
+// so any curl at all (and every leaf here carries some) put leaf vertices
+// outside the board's silhouette and the pages showed through the cover.
+test("the boards overhang the text block on every edge but the hinge", () => {
+  assert.ok(dimensions.square > 0, "there is a square at all");
+  assert.ok(
+    near(dimensions.boardWidth - dimensions.leafWidth, dimensions.square),
+    "one square off the fore edge",
+  );
+  assert.ok(
+    near(EDITION.caseHeight - dimensions.leafHeight, dimensions.square * 2),
+    "one square off the head and one off the tail",
+  );
+  // A passport-sized square: a couple of millimetres on a 125mm book, stated
+  // as a fraction of page height so it scales with the edition.
+  assert.ok(dimensions.square / EDITION.caseHeight < 0.03, "a lip, not a margin");
+});
+
+test("the square cannot be set so deep that it eats the text block", () => {
+  const absurd = caseDimensions({ ...EDITION, square: 99 });
+  assert.ok(absurd.leafWidth > 0 && absurd.leafHeight > 0);
+  assert.ok(absurd.square <= absurd.boardWidth / 2);
+
+  const none = caseDimensions({ ...EDITION, square: 0 });
+  assert.equal(none.leafWidth, none.boardWidth, "opting out still gives flush leaves");
+  assert.equal(none.leafHeight, EDITION.caseHeight);
 });
 
 test("a thicker cover leaves a thinner text block, never a thicker book", () => {

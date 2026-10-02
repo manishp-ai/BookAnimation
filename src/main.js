@@ -3,30 +3,19 @@ import { books } from "./books.js";
 import { loadEdition } from "./edition.js";
 import { SPINE_LABEL_DEFAULTS } from "./spine-label.js";
 import { CaseBinding } from "./binding.js";
-import {
-  chooseDragDirection,
-  dragFraction,
-  edgePreviewDirection,
-  edgePreviewPose,
-  isActivePointer,
-  isPointerOverBook,
-  shouldCompleteDrag,
-} from "./drag.js";
-import { nextOrbitTarget, OrbitSpring, shortestAngleTo } from "./orbit.js";
+import { BookController } from "./book-kit/index.js";
 import "./style.css";
 
 const chinese = document.documentElement.lang.startsWith("zh");
 const readerText = chinese ? {
   loading: "正在准备相册",
   preparing: (title) => `正在准备《${title}》`,
-  open: (title) => `打开《${title}》`,
   cover: "封面",
   backCover: "封底",
   spread: (current, total) => `第 ${current} 组跨页，共 ${total} 组`,
 } : {
   loading: "Preparing edition",
   preparing: (title) => `Preparing ${title}`,
-  open: (title) => `Open ${title}`,
   cover: "Cover",
   backCover: "Back cover",
   spread: (current, total) => `Spread ${current} of ${total}`,
@@ -34,10 +23,6 @@ const readerText = chinese ? {
 const bookTitle = (book) => chinese ? book.titleZh ?? book.title : book.title;
 
 const canvas = document.querySelector("#book-scene");
-const library = document.querySelector("#library");
-const previousButton = document.querySelector("#previous-page");
-const nextButton = document.querySelector("#next-page");
-const rotateButton = document.querySelector("#rotate-view");
 const pageState = document.querySelector("#page-state");
 const loadingCard = document.querySelector("#loading-card");
 const loadingCopy = document.querySelector("#loading-copy");
@@ -135,72 +120,35 @@ const binding = new CaseBinding({
 });
 bookRig.add(binding);
 
-// Drag-to-orbit "look at every side" view, adapted from Ashen Press
-// (~/AshenPress/index.html): a spring smooths the pose, one axis is clamped
-// to a tilt and the other spins freely through a full 360. Off by default —
-// engaging it is what hands control of bookRig's rotation to the pointer;
-// everything above is untouched when it's disengaged.
-let rotateMode = false;
-let orbitDrag = null;
-let orbitFrame = null;
-const orbitSpinSpring = new OrbitSpring();
-const orbitTiltSpring = new OrbitSpring();
-
-function ensureOrbitFrame() {
-  if (orbitFrame !== null) return;
-  let lastTick = performance.now();
-  const tick = (timestamp) => {
-    const delta = Math.min((timestamp - lastTick) / 1000, 0.04);
-    lastTick = timestamp;
-    orbitSpinSpring.update(delta);
-    orbitTiltSpring.update(delta);
-    bookRig.rotation.z = orbitSpinSpring.value;
-    bookRig.rotation.x = orbitTiltSpring.value;
-    renderer.render(scene, camera);
-    orbitFrame = (orbitDrag || !orbitSpinSpring.settled || !orbitTiltSpring.settled)
-      ? requestAnimationFrame(tick)
-      : null;
-  };
-  orbitFrame = requestAnimationFrame(tick);
-}
-
-function setRotateMode(value) {
-  rotateMode = value;
-  rotateButton?.setAttribute("aria-pressed", String(value));
-  orbitDrag = null;
-  if (value) {
-    document.body.style.cursor = "grab";
-  } else {
-    document.body.style.cursor = "";
-    orbitSpinSpring.target = shortestAngleTo(orbitSpinSpring.value, 0);
-    orbitTiltSpring.target = 0;
-  }
-  ensureOrbitFrame();
-}
-
-rotateButton?.addEventListener("click", () => setRotateMode(!rotateMode));
+// The whole interaction surface — drag the book to turn a page, drag the
+// space around it to spin the book in 360°, gesture priority locked to
+// whichever the pointer started on — lives in src/book-kit, a package with
+// no knowledge of this app. It renders every frame itself; nothing here
+// runs its own animation loop.
+const controller = new BookController({
+  canvas,
+  renderer,
+  scene,
+  camera,
+  rig: bookRig,
+  book: binding,
+  reducedMotion,
+  onBeforeRender: () => {
+    refreshDirtyPageNormals();
+    updateStatus();
+  },
+});
+controller.bindKeyboard(window);
 
 let selectedBook = books[0];
 let loading = false;
 let loadToken = 0;
-let pointerStart = null;
 let lastStatusKey = "";
-const EDGE_PREVIEW_AMOUNT = 0.055;
-const EDGE_PREVIEW_ZONE = 28;
-const EDGE_PREVIEW_EPSILON = 0.0005;
-const edgePreview = {
-  baseSheet: null,
-  direction: 0,
-  amount: 0,
-  target: 0,
-};
 const textureLoader = new THREE.TextureLoader();
 const materialCaches = new Map();
 const recentBookIds = [];
 const memoizedSheets = new WeakSet();
 const dirtySheets = new Set();
-let animationFrame = null;
-let previousFrameTime = performance.now();
 
 function makePaperMaterial(map = null) {
   const material = new THREE.MeshStandardMaterial({
@@ -318,29 +266,15 @@ function setLoading(value, copy = readerText.loading) {
   loadingCard.hidden = !value;
   loadingCard.setAttribute("aria-hidden", String(!value));
   loadingCopy.textContent = value ? copy : "";
-  previousButton.disabled = value;
-  nextButton.disabled = value;
-}
-
-function renderLibrary() {
-  library.innerHTML = books
-    .map(
-      (book) => `
-        <button class="library-book ${book.id === selectedBook.id ? "is-active" : ""}"
-          type="button" data-book="${book.id}" aria-label="${readerText.open(bookTitle(book))}" title="${bookTitle(book)}">
-          <span aria-hidden="true">${book.mark}</span>
-        </button>`,
-    )
-    .join("");
+  controller.setLoading(value);
 }
 
 async function selectBook(book, immediate = false) {
   if (!book || (book.id === selectedBook.id && !immediate)) return;
 
-  clearEdgePreview(true);
+  controller.resetInteraction();
   selectedBook = book;
   const token = ++loadToken;
-  renderLibrary();
   setLoading(true, readerText.preparing(bookTitle(book)));
   resize();
 
@@ -401,7 +335,7 @@ async function selectBook(book, immediate = false) {
   rememberBook(book.id);
   setLoading(false);
   updateStatus();
-  requestRender();
+  controller.requestRender();
 }
 
 // Resolves once the spine face is usable, whether it loaded or not: a missing
@@ -425,158 +359,11 @@ function refreshDirtyPageNormals() {
   dirtySheets.clear();
 }
 
-function getBookScreenMetrics() {
-  const bounds = canvas.getBoundingClientRect();
-  const pixelsPerWorldUnit = bounds.width / Math.max(0.001, camera.right - camera.left);
-  return {
-    centerX: bounds.left + bounds.width / 2,
-    centerY: bounds.top + bounds.height / 2,
-    pageWidth: selectedBook.ratio * pixelsPerWorldUnit,
-    pageHeight: pixelsPerWorldUnit,
-  };
-}
-
-function clearEdgePreview(immediate = false) {
-  if (edgePreview.baseSheet === null) return;
-  edgePreview.target = 0;
-  if (!immediate) {
-    requestRender();
-    return;
-  }
-
-  binding.progress = edgePreview.baseSheet;
-  edgePreview.baseSheet = null;
-  edgePreview.direction = 0;
-  edgePreview.amount = 0;
-  requestRender();
-}
-
-function updateEdgePreview(event) {
-  if (reducedMotion || loading || pointerStart || event.pointerType === "touch") return;
-
-  const previewActive = edgePreview.baseSheet !== null;
-  const sheet = previewActive ? edgePreview.baseSheet : Math.round(binding.progress);
-  if (!previewActive && Math.abs(binding.progress - sheet) >= 0.001) return;
-
-  const metrics = getBookScreenMetrics();
-  const maxSheet = Math.ceil(binding.totalPages / 2);
-  const direction = edgePreviewDirection({
-    sheet,
-    maxSheet,
-    pointerX: event.clientX,
-    pointerY: event.clientY,
-    edgeZone: EDGE_PREVIEW_ZONE,
-    ...metrics,
-  });
-
-  if (direction === 0) {
-    clearEdgePreview();
-    return;
-  }
-
-  if (previewActive && edgePreview.direction !== direction) clearEdgePreview(true);
-  edgePreview.baseSheet = sheet;
-  edgePreview.direction = direction;
-  edgePreview.target = EDGE_PREVIEW_AMOUNT;
-  requestRender();
-}
-
-function animateEdgePreview(delta) {
-  if (edgePreview.baseSheet === null) return false;
-
-  const easing = edgePreview.target > edgePreview.amount ? 18 : 14;
-  const blend = 1 - Math.exp(-easing * delta);
-  edgePreview.amount += (edgePreview.target - edgePreview.amount) * blend;
-
-  if (Math.abs(edgePreview.target - edgePreview.amount) < EDGE_PREVIEW_EPSILON) {
-    edgePreview.amount = edgePreview.target;
-  }
-
-  if (edgePreview.target === 0 && edgePreview.amount === 0) {
-    binding.progress = edgePreview.baseSheet;
-    edgePreview.baseSheet = null;
-    edgePreview.direction = 0;
-    edgePreview.amount = 0;
-    return false;
-  }
-
-  const maxSheet = Math.ceil(binding.totalPages / 2);
-  const pose = edgePreviewPose(
-    edgePreview.baseSheet,
-    edgePreview.direction,
-    edgePreview.amount,
-    maxSheet,
-  );
-  if (!pose) {
-    clearEdgePreview(true);
-    return false;
-  }
-
-
-  // Once the lift reaches its target, keep the already-deformed geometry and
-  // stop feeding the modifier stack identical poses on every animation frame.
-  if (
-    edgePreview.target > 0
-    && edgePreview.amount === edgePreview.target
-    && Math.abs(binding.progress - pose.progress) < EDGE_PREVIEW_EPSILON
-  ) {
-    if (binding.progress !== pose.progress) binding.progress = pose.progress;
-    return false;
-  }
-
-  binding.progress = pose.progress;
-  if (edgePreview.target === 0) {
-    let sheetIndex = 0;
-    for (const sheet of binding) {
-      if (sheetIndex === pose.sheetIndex) {
-        // The engine derives bend direction from progress velocity. During a
-        // hover return that would invert the curl, so preserve the lift's bend.
-        sheet.flip(pose.pageProgress, edgePreview.direction, pose.curveIntensity);
-        break;
-      }
-      sheetIndex += 1;
-    }
-  }
-  return edgePreview.amount !== edgePreview.target;
-}
-
-function takeEdgePreviewForDrag() {
-  if (edgePreview.baseSheet === null || edgePreview.target === 0) return null;
-
-  const preview = {
-    sheet: edgePreview.baseSheet,
-    direction: edgePreview.direction,
-    fraction: edgePreview.amount,
-  };
-  // Keep binding.progress and the current curl exactly where the hover left
-  // them; pointer movement will take ownership of that pose on the next frame.
-  edgePreview.baseSheet = null;
-  edgePreview.direction = 0;
-  edgePreview.amount = 0;
-  edgePreview.target = 0;
-  return preview;
-}
-
-function nextPage() {
-  if (!loading && binding.currentPage < binding.totalPages) {
-    clearEdgePreview(true);
-    binding.nextPage();
-    requestRender();
-  }
-}
-
-function previousPage() {
-  if (!loading && binding.currentPage > 0) {
-    clearEdgePreview(true);
-    binding.previousPage();
-    requestRender();
-  }
-}
-
 function updateStatus() {
-  const current = edgePreview.baseSheet === null
+  const previewSheet = controller.previewSheet;
+  const current = previewSheet === null
     ? Math.round(binding.currentPage || 0)
-    : edgePreview.baseSheet * 2;
+    : previewSheet * 2;
   const total = binding.totalPages || selectedBook.pages.length;
   const shown = Math.min(current, total);
   const statusKey = `${loading}:${shown}:${total}`;
@@ -585,196 +372,7 @@ function updateStatus() {
   if (shown === 0) pageState.textContent = readerText.cover;
   else if (shown >= total) pageState.textContent = readerText.backCover;
   else pageState.textContent = readerText.spread(Math.ceil(shown / 2), Math.ceil(total / 2));
-  previousButton.disabled = loading || shown <= 0;
-  nextButton.disabled = loading || shown >= total;
 }
-
-library.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-book]");
-  if (button) selectBook(books.find((book) => book.id === button.dataset.book));
-});
-
-previousButton.addEventListener("click", previousPage);
-nextButton.addEventListener("click", nextPage);
-
-canvas.addEventListener("pointerdown", (event) => {
-  if (rotateMode) {
-    if (!event.isPrimary) return;
-    orbitDrag = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
-    document.body.style.cursor = "grabbing";
-    canvas.setPointerCapture?.(event.pointerId);
-    return;
-  }
-  if (!event.isPrimary || loading) return;
-
-  const preview = takeEdgePreviewForDrag();
-  if (!preview) clearEdgePreview(true);
-  const metrics = getBookScreenMetrics();
-  const sheet = preview?.sheet ?? Math.round(binding.progress);
-  const maxSheet = Math.ceil(binding.totalPages / 2);
-  const settled = preview !== null || Math.abs(binding.progress - sheet) < 0.001;
-  const overBook = isPointerOverBook({
-    sheet,
-    maxSheet,
-    pointerX: event.clientX,
-    pointerY: event.clientY,
-    ...metrics,
-  });
-
-  pointerStart = {
-    pointerId: event.pointerId,
-    x: event.clientX,
-    y: event.clientY,
-    time: performance.now(),
-    sheet,
-    maxSheet,
-    pageWidth: metrics.pageWidth,
-    direction: preview?.direction
-      ?? chooseDragDirection(sheet, maxSheet, event.clientX, metrics.centerX),
-    dragReady: settled && overBook,
-    dragging: false,
-    startFraction: preview?.fraction ?? 0,
-    fraction: preview?.fraction ?? 0,
-    pendingFraction: null,
-  };
-  canvas.setPointerCapture?.(event.pointerId);
-});
-
-canvas.addEventListener("pointermove", (event) => {
-  if (rotateMode) {
-    if (!orbitDrag || orbitDrag.pointerId !== event.pointerId) return;
-    const dx = event.clientX - orbitDrag.x;
-    const dy = event.clientY - orbitDrag.y;
-    orbitDrag.x = event.clientX;
-    orbitDrag.y = event.clientY;
-    const next = nextOrbitTarget(
-      { spin: orbitSpinSpring.target, tilt: orbitTiltSpring.target },
-      dx,
-      dy,
-    );
-    orbitSpinSpring.target = next.spin;
-    orbitTiltSpring.target = next.tilt;
-    ensureOrbitFrame();
-    return;
-  }
-  const start = pointerStart;
-  if (!start) {
-    updateEdgePreview(event);
-    return;
-  }
-  if (start.pointerId !== event.pointerId || !start.dragReady || loading) return;
-
-  const deltaX = event.clientX - start.x;
-  const deltaY = event.clientY - start.y;
-  if (!start.dragging) {
-    if (Math.abs(deltaX) < 6) return;
-    if (Math.abs(deltaY) > Math.abs(deltaX) * 1.15) {
-      start.dragReady = false;
-      return;
-    }
-  }
-
-  const fraction = dragFraction(
-    deltaX,
-    start.direction,
-    start.pageWidth,
-    start.startFraction,
-  );
-  if (!start.dragging && fraction === 0) return;
-
-  start.dragging = true;
-  start.fraction = fraction;
-  start.pendingFraction = fraction;
-  event.preventDefault();
-  requestRender();
-});
-
-canvas.addEventListener("pointerup", (event) => {
-  if (rotateMode) {
-    if (orbitDrag?.pointerId === event.pointerId) {
-      if (canvas.hasPointerCapture?.(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
-      orbitDrag = null;
-      document.body.style.cursor = "grab";
-    }
-    return;
-  }
-  const start = pointerStart;
-  if (!isActivePointer(start, event.pointerId)) return;
-
-  pointerStart = null;
-  if (canvas.hasPointerCapture?.(event.pointerId)) {
-    canvas.releasePointerCapture(event.pointerId);
-  }
-  if (loading) return;
-
-  if (start.dragging) {
-    start.fraction = dragFraction(
-      event.clientX - start.x,
-      start.direction,
-      start.pageWidth,
-      start.startFraction,
-    );
-    const elapsed = performance.now() - start.time;
-    const complete = shouldCompleteDrag(start.fraction, elapsed);
-    const targetSheet = start.sheet + (complete ? start.direction : 0);
-    binding.currentPage = targetSheet * 2;
-    requestRender();
-    return;
-  }
-
-  const deltaX = event.clientX - start.x;
-  const deltaY = event.clientY - start.y;
-  const elapsed = performance.now() - start.time;
-
-  if (Math.abs(deltaX) > 36 && Math.abs(deltaX) > Math.abs(deltaY)) {
-    deltaX < 0 ? nextPage() : previousPage();
-  } else if (elapsed < 500 && Math.abs(deltaY) < 20) {
-    event.clientX < window.innerWidth / 2 ? previousPage() : nextPage();
-  } else if (start.startFraction > 0) {
-    binding.currentPage = start.sheet * 2;
-    requestRender();
-  }
-});
-
-canvas.addEventListener("pointercancel", (event) => {
-  if (rotateMode) {
-    if (orbitDrag?.pointerId === event.pointerId) {
-      orbitDrag = null;
-      document.body.style.cursor = "grab";
-    }
-    return;
-  }
-  if (!isActivePointer(pointerStart, event.pointerId)) return;
-
-  // This also restores a consumed hover pose when the pointer is cancelled
-  // before the drag threshold is crossed.
-  binding.currentPage = pointerStart.sheet * 2;
-  pointerStart = null;
-  requestRender();
-});
-
-canvas.addEventListener("pointerleave", () => {
-  if (rotateMode) return;
-  if (!pointerStart) clearEdgePreview();
-});
-
-window.addEventListener("keydown", (event) => {
-  if (event.key === "ArrowRight" || event.key === " ") {
-    event.preventDefault();
-    nextPage();
-  }
-  if (event.key === "ArrowLeft") previousPage();
-  if (event.key === "Home") {
-    clearEdgePreview(true);
-    binding.currentPage = 0;
-    requestRender();
-  }
-  if (event.key === "End") {
-    clearEdgePreview(true);
-    binding.currentPage = binding.totalPages;
-    requestRender();
-  }
-});
 
 function resize() {
   const width = window.innerWidth;
@@ -790,50 +388,12 @@ function resize() {
   camera.top = halfHeight;
   camera.bottom = -halfHeight;
   camera.updateProjectionMatrix();
-  requestRender();
+  controller.requestRender();
 }
 
 window.addEventListener("resize", resize);
 resize();
-renderLibrary();
 selectBook(books[0], true);
-
-function applyDragFrame() {
-  const start = pointerStart;
-  if (!start?.dragging) return false;
-  if (start.pendingFraction === null) return true;
-
-  binding.progress = start.sheet + start.direction * start.pendingFraction;
-  start.pendingFraction = null;
-  return true;
-}
-
-function requestRender() {
-  if (animationFrame !== null) return;
-  previousFrameTime = performance.now();
-  animationFrame = requestAnimationFrame(animate);
-}
-
-function continueRendering() {
-  if (animationFrame === null) animationFrame = requestAnimationFrame(animate);
-}
-
-function animate(timestamp) {
-  animationFrame = null;
-  const delta = Math.min((timestamp - previousFrameTime) / 1000, 0.04);
-  previousFrameTime = timestamp;
-  const previousProgress = binding.progress;
-  const dragOwnsFrame = applyDragFrame();
-  if (!dragOwnsFrame) binding.animate(delta);
-  const previewNeedsFrame = animateEdgePreview(delta);
-  refreshDirtyPageNormals();
-  updateStatus();
-  renderer.render(scene, camera);
-  const progressChanged = Math.abs(previousProgress - binding.progress) > 1e-7;
-  if (previewNeedsFrame || (!dragOwnsFrame && progressChanged)) continueRendering();
-}
-
-requestRender();
 
 // Test seam, not debug scaffolding: tools/invariants.html asserts the binding's
 // construction against the live scene (hinge edges, a motionless spine, sheet

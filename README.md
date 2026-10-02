@@ -1,16 +1,25 @@
 # World Passport — 3D flipbook
 
-An interactive 3D page-turning book (Three.js + Quick FlipBook). Drag, click,
-or use the arrow keys to turn pages. The ⟲ button toggles a drag-to-orbit view
-of the closed book — spin it freely, tilt it within a clamp, and see its bound
-spine and page-block thickness from the side.
+An interactive 3D page-turning book (Three.js + Quick FlipBook). There is no
+on-screen UI for it — the book is driven entirely by gesture, like a physical
+object: drag the book itself to turn a page, drag the empty space around it
+to spin it in 360° and see its bound spine and page-block thickness from the
+side, arrow keys as an accessible fallback. Whichever the pointer started on
+is what it stays doing for that gesture.
+
+That interaction — page-flip drag, 360° rotation drag, and the gesture
+priority between them — lives in [`src/book-kit`](src/book-kit), a package
+with no knowledge of this app or its content. See its own doc comments
+(`src/book-kit/index.js`, `BookController.js`) to drop it onto a different
+book elsewhere on a site; the only thing it asks of the host is a page-turn
+engine shaped like `src/binding.js`'s `CaseBinding`.
 
 ```bash
 npm ci
 npm run dev     # http://127.0.0.1:5173/
 ```
 
-Verify with `npm test` (28 tests) and `npm run build`. `dist/` is a static site.
+Verify with `npm test` (75 tests) and `npm run build`. `dist/` is a static site.
 
 ## This edition
 

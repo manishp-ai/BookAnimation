@@ -54,7 +54,20 @@ function rotate(x, y, angle) {
  * the text block gets whatever the two boards leave it, rather than the case
  * growing by the boards it gained.
  */
-export function caseDimensions({ caseWidth, caseHeight, thickness, coverThickness, leafCount }) {
+/** A binder's square as a fraction of page height: the lip of board that
+ * overhangs the text block on the three edges that are not the hinge. Real
+ * cases run about 3mm on a 240mm book and a passport about 2mm on 125mm, so
+ * 1.4% sits in the middle of the range. */
+export const SQUARE_RATIO = 0.014;
+
+export function caseDimensions({
+  caseWidth,
+  caseHeight,
+  thickness,
+  coverThickness,
+  leafCount,
+  square = caseHeight * SQUARE_RATIO,
+}) {
   if (!(leafCount > 0)) throw new RangeError("caseDimensions: leafCount must be positive");
   if (!(thickness > 2 * coverThickness)) {
     throw new RangeError("caseDimensions: the two boards leave no room for a text block");
@@ -63,9 +76,19 @@ export function caseDimensions({ caseWidth, caseHeight, thickness, coverThicknes
   const spineWidth = thickness;
   const textBlockThickness = spineWidth - 2 * coverThickness;
   // The case is `caseWidth` wide overall; the spine board eats `coverThickness`
-  // of that at the binding edge, so the cover boards get the rest. Leaves are
-  // cut flush with the boards' fore edge.
+  // of that at the binding edge, so the cover boards get the rest.
   const boardWidth = caseWidth - coverThickness;
+
+  // The square. Leaves used to be cut flush with the boards on all three free
+  // edges, which is not how a case is built and does not survive being looked
+  // at: flush means the leaf's edge and the board's edge are the same line in
+  // space, so the moment a leaf takes up any curl at all — and every leaf here
+  // carries some — its vertices cross outside the board's silhouette and the
+  // text block shows through the cover. Trimming the block back by a square on
+  // the fore edge, head and tail is both what a binder does and what stops it:
+  // the board now has somewhere to overhang from. The hinge edge stays flush,
+  // because that edge is the binding.
+  const safeSquare = clamp(square, 0, Math.min(boardWidth, caseHeight / 2) / 2);
 
   return {
     caseWidth,
@@ -75,7 +98,9 @@ export function caseDimensions({ caseWidth, caseHeight, thickness, coverThicknes
     spineWidth,
     textBlockThickness,
     boardWidth,
-    leafWidth: boardWidth,
+    square: safeSquare,
+    leafWidth: boardWidth - safeSquare,
+    leafHeight: caseHeight - 2 * safeSquare,
     leafSpacing: textBlockThickness / leafCount,
     innerFaceX: coverThickness,
     frontJointY: spineWidth,

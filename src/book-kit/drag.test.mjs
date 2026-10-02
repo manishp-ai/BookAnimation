@@ -6,7 +6,6 @@ import {
   edgePreviewDirection,
   edgePreviewPose,
   isActivePointer,
-  isPointerOverBook,
   shouldCompleteDrag,
 } from "./drag.js";
 
@@ -84,17 +83,11 @@ test("edge preview preserves one bend direction while lifting and returning", ()
   assert.equal(edgePreviewPose(4, 1, 0.05, 4), null);
 });
 
-test("the hit area matches a single cover and an open spread", () => {
-  const metrics = {
-    maxSheet: 4,
-    centerX: 500,
-    centerY: 400,
-    pageWidth: 300,
-    pageHeight: 400,
-  };
-
-  assert.equal(isPointerOverBook({ ...metrics, sheet: 0, pointerX: 640, pointerY: 400 }), true);
-  assert.equal(isPointerOverBook({ ...metrics, sheet: 0, pointerX: 700, pointerY: 400 }), false);
-  assert.equal(isPointerOverBook({ ...metrics, sheet: 2, pointerX: 790, pointerY: 400 }), true);
-  assert.equal(isPointerOverBook({ ...metrics, sheet: 2, pointerX: 500, pointerY: 610 }), false);
+// The flat screen rectangle this module used to offer for hit-testing is gone.
+// It was only ever right while the book faced the camera square-on, and the
+// controller now raycasts the book's real meshes instead — leaving it exported
+// would hand the next thing that picks up this package the same bug twice.
+test("this module no longer offers a screen-rectangle hit test", async () => {
+  const module = await import("./drag.js");
+  assert.equal(module.isPointerOverBook, undefined);
 });

@@ -286,6 +286,7 @@ export class CaseBinding extends THREE.Group {
   #backJoint = new THREE.Group();
   #frontCover = new THREE.Group();
   #backCover = new THREE.Group();
+  #hull = null;
   #textBlock = new THREE.Group();
   #softCoverFlex = [];
   #pivots = [];
@@ -345,6 +346,32 @@ export class CaseBinding extends THREE.Group {
   get sheetPivots() { return this.#pivots; }
   get coverStyle() { return this.#coverStyle; }
   get leafCount() { return this.#dimensions?.leafCount ?? 0; }
+  // The book's aspect ratio (page width in the same units as caseHeight's 1):
+  // what a reusable interaction layer needs to turn screen pixels into a page
+  // hit-box without reaching into the binding's construction options.
+  get caseWidth() { return this.#dimensions?.caseWidth ?? 1; }
+
+  // The book's outer envelope, for cheap hit-testing: the two boards and the
+  // spine, not the full leaf stack. A pointer-move hit test has to run every
+  // frame the pointer is hovering, and raycasting all ninety leaves' curved,
+  // 24-subdivision geometry every time was the lag — ~45x the triangles of
+  // these three boards for a result the boards already give, since a resting
+  // or turning leaf never reaches outside what the covers bound.
+  //
+  // Meshes, flattened — the covers are Groups, and a caller raycasting this
+  // list non-recursively (which is the whole point of handing it a short list)
+  // would otherwise hit nothing but the spine strip and read the entire book
+  // as empty space. Memoised because the list only changes when the case is
+  // rebuilt, and this is read on every pointer move.
+  get hullMeshes() {
+    if (this.#hull) return this.#hull;
+    const meshes = [];
+    for (const root of [this.#frontCover, this.#backCover, this.#spineBoard]) {
+      root?.traverse((object) => { if (object.isMesh) meshes.push(object); });
+    }
+    this.#hull = meshes;
+    return meshes;
+  }
   // One step past the leaves: the reader's last turn shuts the case again.
   get steps() { return this.#dimensions ? bindingSteps(this.#dimensions.leafCount) : 0; }
   get totalPages() { return this.steps * 2; }
@@ -608,7 +635,7 @@ export class CaseBinding extends THREE.Group {
 
   #buildTextBlock() {
     const dimensions = this.#dimensions;
-    const { leafWidth, caseHeight } = dimensions;
+    const { leafWidth, leafHeight } = dimensions;
 
     this.#textBlock.clear();
     this.#textBlock.position.set(0, 0, 0);
@@ -627,7 +654,12 @@ export class CaseBinding extends THREE.Group {
       this.#textBlock.add(pivot);
 
       sheet.position.set(0, 0, 0);
-      sheet.scale.set(leafWidth, 1, -caseHeight);
+      // Trimmed to the text block, not to the boards: the square is what keeps
+      // a curled leaf inside the cover's silhouette instead of through it. The
+      // plane is hinged on its left edge and centred in z, so shortening the
+      // width takes the square off the fore edge alone and shortening the
+      // height takes half off the head and half off the tail.
+      sheet.scale.set(leafWidth, 1, -leafHeight);
       // Off by default; #refreshLeafShadows switches on whichever leaf is
       // actually lifted. The flag is what keeps the reader's own one-time
       // "everything casts" traversal from turning the whole pile back on.
@@ -858,6 +890,7 @@ export class CaseBinding extends THREE.Group {
   #disposeCase() {
     this.#spine.remove(...[this.#spineBoard, this.#spineLiner].filter(Boolean));
     this.#spineBoard = null;
+    this.#hull = null;
     this.#spineLiner = null;
     for (const entry of this.#softCoverFlex) entry.stack.destroy?.();
     this.#softCoverFlex = [];

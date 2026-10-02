@@ -72,20 +72,3 @@ export function edgePreviewPose(baseSheet, direction, amount, maxSheet) {
 
   return { progress, sheetIndex, pageProgress, curveIntensity };
 }
-
-export function isPointerOverBook({
-  sheet,
-  maxSheet,
-  pointerX,
-  pointerY,
-  centerX,
-  centerY,
-  pageWidth,
-  pageHeight,
-}) {
-  const halfWidth = sheet <= 0 || sheet >= maxSheet ? pageWidth / 2 : pageWidth;
-  return (
-    Math.abs(pointerX - centerX) <= halfWidth
-    && Math.abs(pointerY - centerY) <= pageHeight / 2
-  );
-}
